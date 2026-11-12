@@ -9,6 +9,7 @@ import 'ids.dart';
 import 'ignore_rules.dart';
 import 'instrumentation/errors.dart';
 import 'instrumentation/http_overrides.dart';
+import 'instrumentation/profiling.dart';
 import 'instrumentation/rage_clicks.dart';
 import 'instrumentation/vitals.dart';
 import 'metrics/instruments.dart';
@@ -16,6 +17,7 @@ import 'metrics/registry.dart';
 import 'options.dart';
 import 'otlp.dart';
 import 'rate_limiter.dart';
+import 'replay/recorder.dart';
 import 'semantic_conventions.dart' as sc;
 import 'semantic_conventions.dart' show Dash0Severity;
 import 'session.dart';
@@ -23,7 +25,7 @@ import 'span.dart';
 import 'transport.dart';
 
 /// Version reported as `telemetry.sdk.version`.
-const dash0SdkVersion = '0.1.0';
+const dash0SdkVersion = '0.2.0';
 
 /// Scope name reported for all telemetry.
 const dash0ScopeName = 'dash0-flutter-sdk';
@@ -129,6 +131,16 @@ class Dash0Client with WidgetsBindingObserver {
       if (options.isEnabled(Dash0Instrumentation.rageClicks)) {
         client._rageClicks = RageClickInstrumentation(client)..install();
       }
+      if (options.isEnabled(Dash0Instrumentation.sessionReplay) &&
+          options.replay.enabled) {
+        client.replay = ReplayRecorder(client)..install();
+      }
+      if (options.isExplicitlyEnabled(Dash0Instrumentation.profiling)) {
+        client._longTasks = LongTaskMonitor(client)..install();
+        if (options.profiling.runtimeSampleInterval != null) {
+          client._runtime = RuntimeSampler(client)..install();
+        }
+      }
     }
     dash0Debug('Initialized', 'session=$sessionId sampled=${client._sampled}');
     return client;
@@ -156,6 +168,8 @@ class Dash0Client with WidgetsBindingObserver {
     onInstrumentCreated: _ensureMetricTimer,
   );
   RageClickInstrumentation? _rageClicks;
+  LongTaskMonitor? _longTasks;
+  RuntimeSampler? _runtime;
   Timer? _metricTimer;
   Dash0Histogram? _httpDuration;
   bool _httpOverridesInstalled = false;
@@ -172,6 +186,10 @@ class Dash0Client with WidgetsBindingObserver {
   /// The vitals instrumentation, null when disabled. Public for
   /// instrumentations.
   VitalsInstrumentation? vitals;
+
+  /// The session replay recorder, null when disabled. Public for
+  /// instrumentations.
+  ReplayRecorder? replay;
 
   String get sessionId => _sessionId;
 
@@ -296,6 +314,7 @@ class Dash0Client with WidgetsBindingObserver {
     Dash0Severity? severity,
     String? traceId,
     String? spanId,
+    bool rateLimited = true,
   }) {
     final attrs = <String, Object?>{
       ...commonAttributes(),
@@ -312,7 +331,7 @@ class Dash0Client with WidgetsBindingObserver {
       if (severity != null) 'severityNumber': severity.number,
       if (traceId != null) 'traceId': traceId,
       if (spanId != null) 'spanId': spanId,
-    });
+    }, rateLimited: rateLimited);
   }
 
   /// Reports an error as an `app.error` event.
@@ -451,6 +470,25 @@ class Dash0Client with WidgetsBindingObserver {
   }
 
   // ---------------------------------------------------------------------
+  // Profiling and replay
+
+  /// Runs [body] in a span named [name] with frame jank counts, RSS and
+  /// timing attributes. See `Dash0.profile`.
+  Future<T> profile<T>(
+    String name,
+    FutureOr<T> Function(Dash0Span span) body, {
+    Attributes? attributes,
+  }) =>
+      runProfiled<T>(this, name, body, attributes: attributes);
+
+  /// Records the session replay regardless of
+  /// `Dash0Options.sessionReplaySamplingRate`.
+  void startReplay() => replay?.start();
+
+  /// Stops recording the session replay and sends what was recorded.
+  void stopReplay() => replay?.stop();
+
+  // ---------------------------------------------------------------------
   // HTTP capture
 
   /// Instruments all `dart:io` HTTP clients, see `Dash0HttpOverrides`. Does
@@ -471,9 +509,12 @@ class Dash0Client with WidgetsBindingObserver {
   // Transport
 
   /// Queues a log record. Public for instrumentations.
-  void sendLog(Map<String, Object?> log) {
+  ///
+  /// [rateLimited] false skips the shared rate limiter. Only the replay uses
+  /// it, with its own cap.
+  void sendLog(Map<String, Object?> log, {bool rateLimited = true}) {
     if (!_accepts()) return;
-    if (_rateLimiter.isExcessiveUsage()) {
+    if (rateLimited && _rateLimiter.isExcessiveUsage()) {
       dash0Debug('Transport rate limit. Will not send item.', log);
       return;
     }
@@ -542,6 +583,7 @@ class Dash0Client with WidgetsBindingObserver {
   /// Sends everything that is queued now. The returned future completes when
   /// the requests finished.
   Future<void> flush() async {
+    replay?.flush();
     _logBatcher.flush();
     _spanBatcher.flush();
     exportMetrics();
@@ -554,6 +596,7 @@ class Dash0Client with WidgetsBindingObserver {
   /// Ends the current session and starts a new one with a fresh sampling
   /// decision.
   Future<void> terminateSession() async {
+    replay?.flush();
     _sessionId = await _session.terminate();
     _sampled = isSessionSampledIn(_sessionId, options.sessionSamplingRate);
   }
@@ -576,8 +619,11 @@ class Dash0Client with WidgetsBindingObserver {
       }
     }
     if (background) vitals?.flushScreen('background');
+    if (background) _longTasks?.pause();
+    if (state == AppLifecycleState.resumed) _longTasks?.resume();
     _logBatcher.immediate = background;
     _spanBatcher.immediate = background;
+    replay?.onLifecycle(state, background: background);
     if (!options.isEnabled(Dash0Instrumentation.lifecycle)) return;
     emitEvent(
       sc.EventNames.lifecycle,
@@ -594,6 +640,9 @@ class Dash0Client with WidgetsBindingObserver {
     _metricTimer?.cancel();
     _metricTimer = null;
     uninstallHttpOverrides();
+    replay?.uninstall();
+    _longTasks?.uninstall();
+    _runtime?.uninstall();
     vitals?.uninstall();
     _rageClicks?.uninstall();
     _errors.uninstall();

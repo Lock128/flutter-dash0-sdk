@@ -26,6 +26,9 @@ class VitalsInstrumentation {
   int _frames = 0;
   int _slow = 0;
   int _frozen = 0;
+  int _totalFrames = 0;
+  int _totalSlow = 0;
+  int _totalFrozen = 0;
   double? _ttffMs;
   final List<double> _interactions = [];
   static const _maxInteractions = 1000;
@@ -34,6 +37,15 @@ class VitalsInstrumentation {
 
   Dash0Histogram? _appStart, _ttff, _latency, _build, _raster;
   Dash0Counter? _slowCounter, _frozenCounter;
+
+  /// Frames processed since the SDK started, not reset per screen.
+  int get totalFrames => _totalFrames;
+
+  /// Slow frames since the SDK started.
+  int get totalSlowFrames => _totalSlow;
+
+  /// Frozen frames since the SDK started.
+  int get totalFrozenFrames => _totalFrozen;
 
   bool get _metricsOn => client.options.isEnabled(Dash0Instrumentation.metrics);
 
@@ -96,6 +108,9 @@ class VitalsInstrumentation {
       final frozen = total > o.frozenFrameThreshold;
       if (slow) _slow++;
       if (frozen) _frozen++;
+      _totalFrames++;
+      if (slow) _totalSlow++;
+      if (frozen) _totalFrozen++;
 
       final firstFrameOfScreen = _ttffMs == null;
       final ttff =

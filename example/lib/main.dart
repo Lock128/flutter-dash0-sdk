@@ -23,6 +23,19 @@ Future<void> main() async {
           propagators: [
             Dash0Propagator.traceparent([RegExp(r'^https://example\.com')]),
           ],
+          // Vitals, rage clicks and metrics are on by default. Profiling is
+          // opt-in, so list everything that should be active.
+          enabledInstrumentations: {
+            ...Dash0Instrumentation.values,
+          },
+          // Record the replay of 100% of sessions in this example.
+          sessionReplaySamplingRate: 100,
+          replay: const Dash0ReplayOptions(
+            screenshotInterval: Duration(seconds: 15),
+          ),
+          profiling: const Dash0ProfilingOptions(
+            runtimeSampleInterval: Duration(seconds: 10),
+          ),
         ),
       );
     } catch (e) {
@@ -33,7 +46,8 @@ Future<void> main() async {
 
   // Reports uncaught asynchronous errors in addition to the handlers that
   // Dash0.init installs.
-  Dash0.runGuarded(() => runApp(const ExampleApp()));
+  Dash0.runGuarded(
+      () => runApp(const Dash0ReplayBoundary(child: ExampleApp())));
 }
 
 class ExampleApp extends StatelessWidget {
@@ -64,6 +78,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final http.Client _client = Dash0.httpClient();
   String _status = 'idle';
+  int _taps = 0;
 
   Future<void> _load() async {
     try {
@@ -94,6 +109,24 @@ class _HomePageState extends State<HomePage> {
             onTap: () => Dash0.reportError(StateError('Example error')),
             child: const Text('Report error'),
           ),
+          GestureDetector(
+            // Counts as a metric; tapping it 3 times quickly sends an
+            // app.rage_click event.
+            onTap: () {
+              setState(() => _taps++);
+              Dash0.counter('example.button.taps', unit: '{tap}').add(1);
+            },
+            child: Text('Count taps ($_taps)'),
+          ),
+          GestureDetector(
+            // A span with frame and memory attributes.
+            onTap: () => Dash0.profile('example.heavy_work', (span) async {
+              await Future<void>.delayed(const Duration(milliseconds: 200));
+            }),
+            child: const Text('Profile some work'),
+          ),
+          // Blanked in replay screenshots.
+          const Dash0Mask(child: Text('Sensitive: 1234 5678')),
           GestureDetector(
             onTap: () => Navigator.of(context).pushNamed('/details'),
             child: const Text('Open details'),

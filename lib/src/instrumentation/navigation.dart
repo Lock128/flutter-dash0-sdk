@@ -73,6 +73,7 @@ void trackScreenView(
   if (previous == screenName) return;
   client.vitals?.onScreenChange();
   client.currentScreen = screenName;
+  client.replay?.onNavigation(screenName, changeState);
 
   final meta = _safeMeta(client, screenName);
   client.emitEvent(

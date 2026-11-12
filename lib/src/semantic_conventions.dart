@@ -82,6 +82,19 @@ const vitalsInteractions = 'app.vitals.interactions';
 const vitalsInteractionP98Ms = 'app.vitals.interaction_p98_ms';
 const vitalsTrigger = 'app.vitals.trigger';
 
+// Profiling
+const metricLongTaskDuration = 'app.long_task.duration';
+const metricRuntimeRss = 'process.runtime.dart.memory.rss';
+const metricImageCacheSize = 'app.image_cache.size';
+const metricImageCacheCount = 'app.image_cache.count';
+const metricImageCacheLive = 'app.image_cache.live_count';
+const metricRuntimeFrames = 'app.runtime.frames';
+const metricRuntimeFramesSlow = 'app.runtime.frames.slow';
+const metricRuntimeFramesFrozen = 'app.runtime.frames.frozen';
+const longTaskDurationMs = 'app.long_task.duration_ms';
+const longTaskAnr = 'app.long_task.anr';
+const longTaskSource = 'app.long_task.source';
+
 // Rage click and dead tap event attributes
 const clickX = 'app.click.x';
 const clickY = 'app.click.y';
@@ -99,6 +112,8 @@ class EventNames {
   static const vitals = 'app.vitals';
   static const rageClick = 'app.rage_click';
   static const deadTap = 'app.dead_tap';
+  static const sessionReplay = 'app.session_replay';
+  static const longTask = 'app.long_task';
 
   static const all = <String>{
     pageView,
@@ -107,6 +122,8 @@ class EventNames {
     vitals,
     rageClick,
     deadTap,
+    sessionReplay,
+    longTask,
   };
 }
 

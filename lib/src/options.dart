@@ -53,6 +53,16 @@ enum Dash0Instrumentation {
 
   /// Detects rapid repeated taps and sends `app.rage_click` events.
   rageClicks,
+
+  /// Records the event-based session replay stream. Nothing is recorded
+  /// unless `Dash0Options.sessionReplaySamplingRate` is above 0 or
+  /// `Dash0.startReplay` was called.
+  sessionReplay,
+
+  /// Long task and ANR detection plus the optional runtime sampler. Opt-in:
+  /// only active when listed in `Dash0Options.enabledInstrumentations`.
+  /// `Dash0.profile` works regardless.
+  profiling,
 }
 
 /// How metric values are reported over time.
@@ -168,6 +178,117 @@ class Dash0RageClickOptions {
   }
 }
 
+/// Settings of the session replay.
+class Dash0ReplayOptions {
+  const Dash0ReplayOptions({
+    this.enabled = true,
+    this.screenshotInterval,
+    this.screenshotScale = 0.5,
+    this.maxChunkEvents = 50,
+    this.flushInterval = const Duration(seconds: 5),
+    this.maskAllText = true,
+    this.maxSessionDuration = const Duration(minutes: 30),
+    this.maxChunks = 200,
+  });
+
+  /// Set to false to never install the recorder.
+  final bool enabled;
+
+  /// Interval of screenshots of the `Dash0ReplayBoundary`. Null (default)
+  /// disables screenshots.
+  final Duration? screenshotInterval;
+
+  /// Pixel ratio of screenshots relative to logical pixels, for example 0.5
+  /// halves the width and height.
+  final double screenshotScale;
+
+  /// A chunk is sent as soon as it holds this many events.
+  final int maxChunkEvents;
+
+  /// Maximum time events wait in a chunk.
+  final Duration flushInterval;
+
+  /// Blank all text (`Text` and text fields) in screenshots, not only the
+  /// subtrees wrapped in `Dash0Mask`.
+  final bool maskAllText;
+
+  /// Recording stops this long after the first event of a session.
+  final Duration maxSessionDuration;
+
+  /// Maximum number of chunks per session.
+  final int maxChunks;
+
+  void validate() {
+    if (screenshotInterval != null &&
+        screenshotInterval! < const Duration(seconds: 1)) {
+      throw ArgumentError.value(
+          screenshotInterval, 'screenshotInterval', 'must be at least 1s');
+    }
+    if (screenshotScale <= 0 || screenshotScale > 2) {
+      throw ArgumentError.value(
+          screenshotScale, 'screenshotScale', 'must be in (0, 2]');
+    }
+    if (maxChunkEvents < 1) {
+      throw ArgumentError.value(
+          maxChunkEvents, 'maxChunkEvents', 'must be at least 1');
+    }
+    if (flushInterval <= Duration.zero) {
+      throw ArgumentError.value(
+          flushInterval, 'flushInterval', 'must be positive');
+    }
+    if (maxChunks < 1) {
+      throw ArgumentError.value(maxChunks, 'maxChunks', 'must be at least 1');
+    }
+  }
+}
+
+/// Settings of the profiling instrumentation.
+class Dash0ProfilingOptions {
+  const Dash0ProfilingOptions({
+    this.longTaskThreshold = const Duration(milliseconds: 250),
+    this.anrThreshold = const Duration(seconds: 5),
+    this.heartbeatInterval = const Duration(milliseconds: 100),
+    this.useWatchdogIsolate = true,
+    this.runtimeSampleInterval,
+  });
+
+  /// Main isolate stalls longer than this are reported as `app.long_task`.
+  final Duration longTaskThreshold;
+
+  /// Stalls longer than this are flagged as ANR.
+  final Duration anrThreshold;
+
+  /// Period of the main isolate heartbeat.
+  final Duration heartbeatInterval;
+
+  /// Also run a watchdog isolate that observes the heartbeat. Ignored on web.
+  final bool useWatchdogIsolate;
+
+  /// Interval of the runtime sampler (memory, image cache, frame totals).
+  /// Null (default) disables it.
+  final Duration? runtimeSampleInterval;
+
+  void validate() {
+    if (longTaskThreshold <= Duration.zero) {
+      throw ArgumentError.value(
+          longTaskThreshold, 'longTaskThreshold', 'must be positive');
+    }
+    if (anrThreshold < longTaskThreshold) {
+      throw ArgumentError.value(
+          anrThreshold, 'anrThreshold', 'must not be below longTaskThreshold');
+    }
+    if (heartbeatInterval <= Duration.zero) {
+      throw ArgumentError.value(
+          heartbeatInterval, 'heartbeatInterval', 'must be positive');
+    }
+    if (runtimeSampleInterval != null &&
+        runtimeSampleInterval! < const Duration(seconds: 1)) {
+      throw ArgumentError.value(
+          runtimeSampleInterval, 'runtimeSampleInterval', 'at least 1 second');
+    }
+  }
+}
+
 /// Options for `Dash0.init`.
 class Dash0Options {
   const Dash0Options({
@@ -202,6 +323,9 @@ class Dash0Options {
     this.compression = Dash0Compression.gzip,
     this.vitals = const Dash0VitalsOptions(),
     this.rageClicks = const Dash0RageClickOptions(),
+    this.sessionReplaySamplingRate = 0,
+    this.replay = const Dash0ReplayOptions(),
+    this.profiling = const Dash0ProfilingOptions(),
   });
 
   /// Value of `service.name`.
@@ -301,6 +425,17 @@ class Dash0Options {
   /// Settings of the rage click detection.
   final Dash0RageClickOptions rageClicks;
 
+  /// Percentage (0 to 100) of sessions that record a session replay. The
+  /// decision is deterministic per session id and only applies to sessions
+  /// that are sampled in by [sessionSamplingRate]. Default 0: no replay.
+  final num sessionReplaySamplingRate;
+
+  /// Settings of the session replay.
+  final Dash0ReplayOptions replay;
+
+  /// Settings of the profiling instrumentation.
+  final Dash0ProfilingOptions profiling;
+
   /// All configured endpoints.
   List<Dash0Endpoint> get allEndpoints => [
         if (endpoint != null) endpoint!,
@@ -338,6 +473,13 @@ class Dash0Options {
         'must be between 0 and 100',
       );
     }
+    if (sessionReplaySamplingRate < 0 || sessionReplaySamplingRate > 100) {
+      throw ArgumentError.value(
+        sessionReplaySamplingRate,
+        'sessionReplaySamplingRate',
+        'must be between 0 and 100',
+      );
+    }
     final all = allEndpoints;
     if (all.isEmpty) {
       throw ArgumentError('At least one endpoint is required');
@@ -365,5 +507,7 @@ class Dash0Options {
     }
     vitals.validate();
     rageClicks.validate();
+    replay.validate();
+    profiling.validate();
   }
 }

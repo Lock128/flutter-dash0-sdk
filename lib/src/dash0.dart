@@ -101,6 +101,27 @@ class Dash0 {
       _client?.gauge(name, unit: unit, description: description) ??
       Dash0Gauge.noop(name);
 
+  /// Runs [body] in a span named [name] and attaches the frame jank counts,
+  /// RSS (where available) and duration measured while it ran as
+  /// `profile.*` attributes. Without a client [body] is run unchanged.
+  static Future<T> profile<T>(
+    String name,
+    FutureOr<T> Function(Dash0Span? span) body, {
+    Attributes? attributes,
+  }) {
+    final c = _client;
+    if (c == null) return Future.sync(() => body(null));
+    return c.profile<T>(name, body, attributes: attributes);
+  }
+
+  /// Records the session replay for this session even if it was not sampled
+  /// in by `Dash0Options.sessionReplaySamplingRate`. The session still has to
+  /// be sampled in by `sessionSamplingRate`.
+  static void startReplay() => _client?.startReplay();
+
+  /// Stops recording the session replay and sends what was recorded.
+  static void stopReplay() => _client?.stopReplay();
+
   /// Runs [body] in a guarded zone that reports uncaught errors.
   static R? runGuarded<R>(R Function() body) {
     return runZonedGuarded(body, (error, stack) {

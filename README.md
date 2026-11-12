@@ -19,6 +19,8 @@ package.
 - Errors: `FlutterError.onError` and `PlatformDispatcher.onError` are captured and sent as `app.error` events with
   sanitized stack traces. `Dash0.runGuarded` covers zones.
 - App lifecycle events (`app.lifecycle`).
+- Metrics, gzip compression, `dart:io` HTTP capture, web vitals equivalents, rage clicks, session replay and
+  profiling (see the sections below).
 - Public API: `sendEvent`, `startSpan`, `trace`, `reportError`, `identify`, `addSignalAttribute`,
   `removeSignalAttribute`, `terminateSession`, `flush`, `shutdown` and a runtime `enabled` switch.
 
@@ -225,6 +227,83 @@ Limitations: there is no layout shift concept in Flutter. Frame timings come fro
 
 `Dash0Instrumentation.rageClicks` (on by default) sends `app.rage_click` when `tapCount` (3) taps land within `radius` (40 logical px) within `window` (1 s). Attributes: `app.screen.name`, `app.click.x`, `app.click.y` (rounded), `app.click.count` and `app.click.target` (render object type, never text). One burst sends one event. Set `Dash0RageClickOptions(enableDeadTaps: true)` to also send `app.dead_tap` for taps that hit nothing tappable (heuristic).
 
+### Session replay
+
+The web SDK records the DOM with rrweb. Flutter has no DOM, so the replay is an event stream by default:
+taps, long presses, drags and scrolls (normalized `x`/`y` between 0 and 1, the render object type that was hit),
+route changes, text field focus, blur and change markers, keyboard visibility, viewport and orientation changes
+and app lifecycle changes. Screenshots are optional.
+
+```dart
+Dash0Options(
+  // ...
+  sessionReplaySamplingRate: 10, // percent of sessions, default 0 (off)
+  replay: Dash0ReplayOptions(
+    screenshotInterval: Duration(seconds: 10), // default null: no screenshots
+    screenshotScale: 0.5,
+  ),
+)
+
+runApp(Dash0ReplayBoundary(child: MyApp())); // only needed for screenshots
+Dash0Mask(child: Image.asset('qr.png'));      // blanked in screenshots
+```
+
+Events are batched into chunks (50 events or 5 s, flushed when the app goes to the background and on session
+change) and sent as `app.session_replay` log records. The body is a JSON string with `version`, `session_id`,
+`sequence`, `start_ts`, `end_ts`, `viewport` and `events`; the record carries `app.replay.sequence` and
+`app.replay.event_count`. The replay has its own sampling rate, deterministic per session id, and only applies to
+sessions that `sessionSamplingRate` samples in. `Dash0.startReplay()` and `Dash0.stopReplay()` override the rate
+for the current run. Replay records bypass the shared rate limiter and use their own caps
+(`maxChunks` 200 per session, `maxSessionDuration` 30 minutes).
+
+Privacy: text field values are never read, only markers (`obscured` tells password fields apart). Screenshots
+blank every `Text` and text field (`maskAllText`, default true) and every `Dash0Mask` subtree before encoding;
+the pixels never leave the device unmasked. Screenshots are PNG (Flutter has no JPEG encoder) and downscaled, but
+still large: each is typically tens of KiB base64, so keep the interval high. Gzip compression helps a little.
+
+### Profiling
+
+Dart has no in-process sampling profiler API, so this is a set of cheap probes. Enable them with
+`Dash0Instrumentation.profiling` in `enabledInstrumentations` (opt-in):
+
+- Long tasks and ANRs: a heartbeat timer on the main isolate (100 ms) plus, where isolates exist, a watchdog
+  isolate. A stall of at least `longTaskThreshold` (250 ms) sends an `app.long_task` event with
+  `app.long_task.duration_ms`, `app.long_task.anr` (true from `anrThreshold`, 5 s), `app.long_task.source` and
+  the current screen, plus the `app.long_task.duration` histogram. Monitoring pauses while the app is in the
+  background.
+- Runtime sampler: set `Dash0ProfilingOptions(runtimeSampleInterval: Duration(seconds: 10))` for gauges
+  `process.runtime.dart.memory.rss`, `app.image_cache.size`, `app.image_cache.count`, `app.image_cache.live_count`
+  and `app.runtime.frames`, `.slow` and `.frozen` (totals since start).
+- `Dash0.profile(name, body)` wraps `body` in a span and adds `profile.duration_ms`, `profile.frames`,
+  `profile.frames.slow`, `profile.frames.frozen`, `profile.rss.start`, `profile.rss.end` and `profile.rss.delta`.
+  In debug mode it also adds `profile.stack.start` and `profile.stack.end` span events with a stack sample.
+  It works without the profiling flag.
+
+### Design decisions and platform limitations
+
+| Feature | Android / iOS / desktop | Web |
+| --- | --- | --- |
+| Metrics, vitals, rage clicks | yes | yes (frame timings depend on the renderer) |
+| gzip compression | yes | no, bodies are sent as is |
+| Capture of all HTTP clients (`Dash0HttpOverrides`) | yes | no, use `Dash0HttpClient` |
+| Replay events | yes | yes |
+| Replay screenshots | yes | yes, where `RepaintBoundary.toImage` works |
+| Long tasks (heartbeat) | yes | yes |
+| Watchdog isolate | yes | no |
+| RSS gauge and `profile.rss.*` | yes | no |
+
+Known limits:
+
+- No native CPU sampling or native thread stalls. A stall of the Dart main isolate is detected, but not its cause.
+  Use DevTools or Dash0 traces to find out.
+- The heartbeat cannot see a stall before it ends, so `app.long_task` is sent when the main isolate recovers. The
+  watchdog reports ANRs that take longer than `anrThreshold` for the same reason with the duration seen so far.
+- Replay is event-based, not pixel-based, so it cannot show what the user saw unless screenshots are enabled.
+  Taps are recorded on the first matching pointer up, with the gesture ordered before its effects.
+- The replay is lossy by design: chunks that cannot be sent are dropped, and recording stops at the caps.
+- Wrapping a subtree in `Dash0Mask` only affects screenshots. Keep sensitive data out of route names and custom
+  events yourself.
+
 ### Errors
 
 `Dash0.init` hooks `FlutterError.onError` and `PlatformDispatcher.instance.onError` and still calls the handlers that
@@ -310,7 +389,11 @@ telemetry.
 | `localStorage` session | `shared_preferences` session |
 | Tab id | `app.instance.id` |
 | Last chance unload flush | Flush on `paused`, `hidden` and `detached` lifecycle states |
-| Web vitals, session recording, rage clicks, profiling, transport compression | Not implemented |
+| Web vitals | Frame based equivalents, see "Web vitals equivalents" |
+| rrweb session recording | Event-based replay with optional masked screenshots |
+| Rage clicks | `app.rage_click` events |
+| Profiling | Long task / ANR detection, runtime gauges and `Dash0.profile` |
+| Transport compression | gzip (not on web) |
 
 ## Development
 
