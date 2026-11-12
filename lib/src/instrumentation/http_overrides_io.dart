@@ -252,6 +252,13 @@ Duration dash0AbandonedRequestTimeout = const Duration(minutes: 2);
 
 class _Dash0HttpClientRequest implements HttpClientRequest {
   _Dash0HttpClientRequest(this._inner, this._call) {
+    _arm();
+  }
+
+  /// (Re)starts the abandon timer. Called on every write so that only an
+  /// idle request, not a long upload, counts as abandoned.
+  void _arm() {
+    _abandonTimer?.cancel();
     _abandonTimer = Timer(dash0AbandonedRequestTimeout, () {
       _call.finish(error: TimeoutException('HTTP request was never closed'));
     });
@@ -343,7 +350,10 @@ class _Dash0HttpClientRequest implements HttpClientRequest {
   Uri get uri => _inner.uri;
 
   @override
-  void add(List<int> data) => _inner.add(data);
+  void add(List<int> data) {
+    _arm();
+    _inner.add(data);
+  }
 
   @override
   void addError(Object error, [StackTrace? stackTrace]) =>
@@ -351,23 +361,37 @@ class _Dash0HttpClientRequest implements HttpClientRequest {
 
   @override
   Future<dynamic> addStream(Stream<List<int>> stream) =>
-      _inner.addStream(stream);
+      _inner.addStream(stream.map((chunk) {
+        _arm();
+        return chunk;
+      })).whenComplete(_arm);
 
   @override
   Future<dynamic> flush() => _inner.flush();
 
   @override
-  void write(Object? object) => _inner.write(object);
+  void write(Object? object) {
+    _arm();
+    _inner.write(object);
+  }
 
   @override
-  void writeAll(Iterable<dynamic> objects, [String separator = '']) =>
-      _inner.writeAll(objects, separator);
+  void writeAll(Iterable<dynamic> objects, [String separator = '']) {
+    _arm();
+    _inner.writeAll(objects, separator);
+  }
 
   @override
-  void writeCharCode(int charCode) => _inner.writeCharCode(charCode);
+  void writeCharCode(int charCode) {
+    _arm();
+    _inner.writeCharCode(charCode);
+  }
 
   @override
-  void writeln([Object? object = '']) => _inner.writeln(object);
+  void writeln([Object? object = '']) {
+    _arm();
+    _inner.writeln(object);
+  }
 }
 
 Map<String, String> _flatten(HttpHeaders headers) {

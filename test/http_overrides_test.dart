@@ -181,6 +181,31 @@ void main() {
     await client.shutdown();
   });
 
+  test('a slow upload is not reported as abandoned', () async {
+    final (client, transport) = await startClient();
+    final old = dash0AbandonedRequestTimeout;
+    dash0AbandonedRequestTimeout = const Duration(milliseconds: 150);
+    try {
+      await underOverrides(client, () async {
+        final c = HttpClient();
+        final req = await c.postUrl(base.replace(path: '/slow'));
+        for (var i = 0; i < 5; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 70));
+          req.add([1, 2, 3]);
+        }
+        final res = await req.close();
+        await res.drain<void>();
+        c.close();
+      });
+    } finally {
+      dash0AbandonedRequestTimeout = old;
+    }
+    await client.flush();
+    expect(transport.spans, hasLength(1));
+    expect(attr(transport.spans.single, 'error.type'), isNull);
+    await client.shutdown();
+  });
+
   test('respects ignoreUrls', () async {
     final (client, transport) =
         await startClient(ignoreUrls: [RegExp('/ignored')]);
