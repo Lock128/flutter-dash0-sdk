@@ -246,14 +246,24 @@ class _Dash0HttpClient implements HttpClient {
   void close({bool force = false}) => _inner.close(force: force);
 }
 
+/// How long a request may stay open without `close()` being called before
+/// its span is ended as abandoned.
+Duration dash0AbandonedRequestTimeout = const Duration(minutes: 2);
+
 class _Dash0HttpClientRequest implements HttpClientRequest {
-  _Dash0HttpClientRequest(this._inner, this._call);
+  _Dash0HttpClientRequest(this._inner, this._call) {
+    _abandonTimer = Timer(dash0AbandonedRequestTimeout, () {
+      _call.finish(error: TimeoutException('HTTP request was never closed'));
+    });
+  }
 
   final HttpClientRequest _inner;
   final HttpCall _call;
+  Timer? _abandonTimer;
 
   @override
   Future<HttpClientResponse> close() async {
+    _abandonTimer?.cancel();
     try {
       final response = await _inner.close();
       try {
@@ -276,6 +286,7 @@ class _Dash0HttpClientRequest implements HttpClientRequest {
 
   @override
   void abort([Object? exception, StackTrace? stackTrace]) {
+    _abandonTimer?.cancel();
     _call.finish(
       error: exception ?? StateError('Request aborted'),
       stackTrace: stackTrace,
@@ -379,7 +390,7 @@ class _Dash0HttpClientResponse extends Stream<List<int>>
     void Function()? onDone,
     bool? cancelOnError,
   }) {
-    return _inner
+    final subscription = _inner
         .transform(StreamTransformer<List<int>, List<int>>.fromHandlers(
           handleError: (error, stackTrace, sink) {
             _call.finish(error: error, stackTrace: stackTrace);
@@ -396,6 +407,7 @@ class _Dash0HttpClientResponse extends Stream<List<int>>
           onDone: onDone,
           cancelOnError: cancelOnError,
         );
+    return _EndSpanOnCancel(subscription, _call);
   }
 
   @override
@@ -439,4 +451,41 @@ class _Dash0HttpClientResponse extends Stream<List<int>>
 
   @override
   int get statusCode => _inner.statusCode;
+}
+
+/// Ends the span when the consumer cancels the response early (image
+/// decoders, `Stream.first`, timeouts), where no done event is delivered.
+class _EndSpanOnCancel implements StreamSubscription<List<int>> {
+  _EndSpanOnCancel(this._inner, this._call);
+
+  final StreamSubscription<List<int>> _inner;
+  final HttpCall _call;
+
+  @override
+  Future<void> cancel() {
+    _call.finish();
+    return _inner.cancel();
+  }
+
+  @override
+  void onData(void Function(List<int> data)? handleData) =>
+      _inner.onData(handleData);
+
+  @override
+  void onError(Function? handleError) => _inner.onError(handleError);
+
+  @override
+  void onDone(void Function()? handleDone) => _inner.onDone(handleDone);
+
+  @override
+  void pause([Future<void>? resumeSignal]) => _inner.pause(resumeSignal);
+
+  @override
+  void resume() => _inner.resume();
+
+  @override
+  bool get isPaused => _inner.isPaused;
+
+  @override
+  Future<E> asFuture<E>([E? futureValue]) => _inner.asFuture(futureValue);
 }

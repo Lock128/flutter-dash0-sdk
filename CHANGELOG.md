@@ -2,6 +2,7 @@
 
 ## 0.2.0
 
+- Export metrics when the app goes to the background and when a session is terminated, end HTTP spans of cancelled response streams and of requests that are never closed, do not report start up vitals for time spent while disabled, count rage clicks on taps instead of every pointer down, and document the screenshot masking and profiling limits.
 - Add event-based session replay (`Dash0Instrumentation.sessionReplay`, `Dash0Options.sessionReplaySamplingRate`, `Dash0ReplayOptions`) sending `app.session_replay` records, with `Dash0ReplayBoundary`, `Dash0Mask`, optional masked screenshots and `Dash0.startReplay` / `stopReplay`.
 - Add profiling (`Dash0Instrumentation.profiling`, `Dash0ProfilingOptions`): `app.long_task` events for main isolate stalls and ANRs with a watchdog isolate, runtime gauges and `Dash0.profile(name, body)`.
 - `Dash0Client.emitEvent` and `sendLog` accept `rateLimited: false`.

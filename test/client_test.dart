@@ -187,6 +187,21 @@ void main() {
     );
   });
 
+  test('going to the background exports metrics', () async {
+    final (client, transport) = await start(batchSize: 10);
+    client.counter('app.test.count').add(3);
+    expect(transport.metrics, isEmpty);
+    await client.handleLifecycleState(AppLifecycleState.paused);
+    expect(transport.metrics.map((m) => m['name']), contains('app.test.count'));
+  });
+
+  test('terminating the session exports metrics', () async {
+    final (client, transport) = await start();
+    client.counter('app.test.count').add(1);
+    await client.terminateSession();
+    expect(transport.metrics.map((m) => m['name']), contains('app.test.count'));
+  });
+
   test('terminating the session changes the session id', () async {
     final (client, _) = await start();
     final before = client.sessionId;

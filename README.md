@@ -121,8 +121,11 @@ await Dash0.init(Dash0Options(
 ```
 
 An `HttpOverrides` that was installed earlier keeps working: the SDK wraps the clients it creates. Requests sent
-through `Dash0HttpClient` are not recorded twice. The spans end when the response body is fully read or fails, so
-a response that is never read does not produce a span. On web `dart:io` is unavailable, install does nothing and
+through `Dash0HttpClient` are not recorded twice. The spans end when the response body is fully read, fails or is
+cancelled by the consumer, or when a request is never closed for two minutes. A response that is opened but never
+listened to does not produce a span. A redirect chain followed automatically by `dart:io` is one span, and
+`response.redirect()` continuations are not instrumented. Install the overrides last: if the host app or a plugin
+sets `HttpOverrides.global` afterwards, it replaces Dash0 without notice. On web `dart:io` is unavailable, install does nothing and
 you should use `Dash0HttpClient` or the Dio interceptor.
 
 **Dio.** Dio uses `dart:io` by default, so `HttpOverrides` already covers it. To instrument Dio on web or with a
@@ -221,11 +224,11 @@ Enabled by `Dash0Instrumentation.vitals` (on by default). Metrics additionally n
 
 An `app.vitals` event with `app.vitals.ttff_ms`, `frames_total`, `frames_slow`, `frames_frozen`, `interactions` and `interaction_p98_ms` is sent when the screen changes (needs the navigation instrumentation) and when the app goes to the background. Thresholds are configurable with `Dash0VitalsOptions`. Call `Dash0.client?.vitals?.markInteraction()` for custom gestures.
 
-Limitations: there is no layout shift concept in Flutter. Frame timings come from `SchedulerBinding.addTimingsCallback`, which may report nothing on some web renderers, in which case the vitals stay empty. Interaction latency is measured with the SDK clock when the timing callback runs, so it can be slightly higher than the real value.
+Limitations: there is no layout shift concept in Flutter. Frame timings come from `SchedulerBinding.addTimingsCallback`, which may report nothing on some web renderers, in which case the vitals stay empty. App start, time to first frame and interaction latency are measured with the SDK clock when the batched timing callback runs, so they can be higher than the real values by the batching delay. Frames seen while the SDK is disabled (for example while waiting for a feature flag) are not measured, and `app.start.duration` is not reported in that case; time to first frame then counts from the last unmeasured frame.
 
 ### Rage clicks
 
-`Dash0Instrumentation.rageClicks` (on by default) sends `app.rage_click` when `tapCount` (3) taps land within `radius` (40 logical px) within `window` (1 s). Attributes: `app.screen.name`, `app.click.x`, `app.click.y` (rounded), `app.click.count` and `app.click.target` (render object type, never text). One burst sends one event. Set `Dash0RageClickOptions(enableDeadTaps: true)` to also send `app.dead_tap` for taps that hit nothing tappable (heuristic).
+`Dash0Instrumentation.rageClicks` (on by default) sends `app.rage_click` when `tapCount` (3) taps (pointer up within 18 px of the pointer down, so drags and scrolls do not count) land within `radius` (40 logical px) within `window` (1 s). Attributes: `app.screen.name`, `app.click.x`, `app.click.y` (rounded), `app.click.count` and `app.click.target` (render object type, never text). One burst sends one event. Set `Dash0RageClickOptions(enableDeadTaps: true)` to also send `app.dead_tap` for taps that hit nothing tappable (heuristic).
 
 ### Session replay
 
@@ -258,7 +261,9 @@ for the current run. Replay records bypass the shared rate limiter and use their
 
 Privacy: text field values are never read, only markers (`obscured` tells password fields apart). Screenshots
 blank every `Text` and text field (`maskAllText`, default true) and every `Dash0Mask` subtree before encoding;
-the pixels never leave the device unmasked. Screenshots are PNG (Flutter has no JPEG encoder) and downscaled, but
+only text and `Dash0Mask` subtrees are blanked. Images, avatars, user media, text painted with `CustomPaint` and platform views are
+NOT detected, so wrap them in `Dash0Mask` or keep screenshots off (the default). Route names go into the stream, so
+scrub identifiers from them (for example `/user/123`). Screenshots are PNG (Flutter has no JPEG encoder) and downscaled, but
 still large: each is typically tens of KiB base64, so keep the interval high. Gzip compression helps a little.
 
 ### Profiling
@@ -276,7 +281,7 @@ Dart has no in-process sampling profiler API, so this is a set of cheap probes. 
   and `app.runtime.frames`, `.slow` and `.frozen` (totals since start).
 - `Dash0.profile(name, body)` wraps `body` in a span and adds `profile.duration_ms`, `profile.frames`,
   `profile.frames.slow`, `profile.frames.frozen`, `profile.rss.start`, `profile.rss.end` and `profile.rss.delta`.
-  In debug mode it also adds `profile.stack.start` and `profile.stack.end` span events with a stack sample.
+  In debug mode it also adds `profile.stack.start` and `profile.stack.end` span events holding the stack of the caller at those two points. They are call site markers, not a sampled profile.
   It works without the profiling flag.
 
 ### Design decisions and platform limitations

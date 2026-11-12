@@ -439,6 +439,8 @@ class ReplayRecorder with WidgetsBindingObserver {
     try {
       final o = client.options.replay;
       final scale = o.screenshotScale;
+      // toImage captures the layer tree synchronously, so computing the
+      // rectangles in the same synchronous step keeps them aligned.
       final rects = maskRects(ro, maskAllText: o.maskAllText);
       image = await ro.toImage(pixelRatio: scale);
       final recorder = ui.PictureRecorder();

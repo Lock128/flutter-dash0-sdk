@@ -67,6 +67,22 @@ void main() {
     await client.shutdown();
   });
 
+  test('frames seen while disabled do not inflate app start or ttff', () async {
+    final (client, transport) = await start(enabled: false);
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+    frame(client, 5, 5, 10);
+    client.enabled = true;
+    frame(client, 5, 5, 10);
+    await client.flush();
+    expect(transport.metrics.map((m) => m['name']),
+        isNot(contains('app.start.duration')));
+    final ttff = metric(transport, 'app.screen.ttff');
+    final point =
+        ((ttff['histogram']! as Map)['dataPoints'] as List).single as Map;
+    expect(point['max'] as num, lessThan(50));
+    await client.shutdown();
+  });
+
   test('FrameTiming values are mapped', () async {
     final (client, transport) = await start();
     client.vitals!.onTimings([

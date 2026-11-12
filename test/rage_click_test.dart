@@ -101,6 +101,18 @@ void main() {
     await client.shutdown();
   });
 
+  testWidgets('drags are not counted as taps', (tester) async {
+    final (client, transport) = await start();
+    await tester.pumpWidget(app());
+    for (var i = 0; i < 4; i++) {
+      await tester.drag(find.byKey(const Key('btn')), const Offset(0, 30));
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await client.flush();
+    expect(events(transport, 'app.rage_click'), isEmpty);
+    await client.shutdown();
+  });
+
   testWidgets('nothing recorded when disabled, unsampled or not listed',
       (tester) async {
     await tester.pumpWidget(app());

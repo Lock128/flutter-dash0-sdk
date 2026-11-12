@@ -17,7 +17,7 @@ class VitalsInstrumentation {
 
   final Dash0Client client;
   final DateTime Function() _clock;
-  late final DateTime _startedAt;
+  late DateTime _startedAt;
   late DateTime _screenStartedAt;
   bool _installed = false;
   bool _appStartRecorded = false;
@@ -98,8 +98,15 @@ class VitalsInstrumentation {
     required Duration total,
   }) {
     try {
-      if (!client.isEnabled || !client.isSessionSampled) return;
       final now = _clock();
+      if (!client.isEnabled || !client.isSessionSampled) {
+        // Frames that are not observed: the start up was not measured, so
+        // do not report time spent while disabled (for example waiting for
+        // a feature flag) as app start or time to first frame.
+        _appStartRecorded = true;
+        _screenStartedAt = now;
+        return;
+      }
       final screen = client.currentScreen;
       final attrs = screen == null ? null : {sc.appScreenName: screen};
       _frames++;

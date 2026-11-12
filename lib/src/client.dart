@@ -597,6 +597,7 @@ class Dash0Client with WidgetsBindingObserver {
   /// decision.
   Future<void> terminateSession() async {
     replay?.flush();
+    exportMetrics();
     _sessionId = await _session.terminate();
     _sampled = isSessionSampledIn(_sessionId, options.sessionSamplingRate);
   }
@@ -624,6 +625,9 @@ class Dash0Client with WidgetsBindingObserver {
     _logBatcher.immediate = background;
     _spanBatcher.immediate = background;
     replay?.onLifecycle(state, background: background);
+    // The periodic timer does not run once suspended and delta data of the
+    // unsent interval would be lost.
+    if (background) exportMetrics();
     if (!options.isEnabled(Dash0Instrumentation.lifecycle)) return;
     emitEvent(
       sc.EventNames.lifecycle,

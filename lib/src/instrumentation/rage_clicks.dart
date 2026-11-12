@@ -55,8 +55,8 @@ class RageClickDetector {
   }
 }
 
-/// Sends `app.rage_click` (and optionally `app.dead_tap`) events for pointer
-/// down events. No text content is captured, only the render object type.
+/// Sends `app.rage_click` (and optionally `app.dead_tap`) events for taps (pointer
+/// up close to the pointer down). No text content is captured, only the render object type.
 class RageClickInstrumentation {
   RageClickInstrumentation(this.client, {DateTime Function()? clock})
       : _clock = clock ?? DateTime.now,
@@ -89,8 +89,25 @@ class RageClickInstrumentation {
     } catch (_) {}
   }
 
+  final Map<int, Offset> _downs = {};
+
+  /// Movement in logical pixels after which a pointer is a drag, not a tap.
+  static const double tapSlop = 18;
+
   void _route(PointerEvent event) {
-    if (event is! PointerDownEvent) return;
+    if (event is PointerDownEvent) {
+      if (_downs.length > 20) _downs.clear();
+      _downs[event.pointer] = event.position;
+      return;
+    }
+    if (event is PointerCancelEvent) {
+      _downs.remove(event.pointer);
+      return;
+    }
+    if (event is! PointerUpEvent) return;
+    final down = _downs.remove(event.pointer);
+    // Drags and scroll flicks are not taps.
+    if (down == null || (event.position - down).distance > tapSlop) return;
     try {
       handleTap(event.position, hitTarget: () => _hit(event), time: _clock());
     } catch (e) {
@@ -132,7 +149,7 @@ class RageClickInstrumentation {
     }
   }
 
-  HitTestResult? _hit(PointerDownEvent event) {
+  HitTestResult? _hit(PointerEvent event) {
     final result = HitTestResult();
     WidgetsBinding.instance.hitTestInView(result, event.position, event.viewId);
     return result;

@@ -147,6 +147,40 @@ void main() {
     server = await HttpServer.bind('127.0.0.1', 0);
   });
 
+  test('cancelling the response subscription ends the span', () async {
+    final (client, transport) = await startClient();
+    await underOverrides(client, () async {
+      final c = HttpClient();
+      final res = await (await c.getUrl(base.replace(path: '/c'))).close();
+      await res.listen((_) {}).cancel();
+      c.close(force: true);
+    });
+    await client.flush();
+    expect(transport.spans, hasLength(1));
+    expect(transport.metrics.single['name'], 'http.client.request.duration');
+    await client.shutdown();
+  });
+
+  test('a request that is never closed ends its span', () async {
+    final (client, transport) = await startClient();
+    final old = dash0AbandonedRequestTimeout;
+    dash0AbandonedRequestTimeout = const Duration(milliseconds: 20);
+    try {
+      await underOverrides(client, () async {
+        final c = HttpClient();
+        await c.getUrl(base.replace(path: '/never'));
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        c.close(force: true);
+      });
+    } finally {
+      dash0AbandonedRequestTimeout = old;
+    }
+    await client.flush();
+    expect(transport.spans, hasLength(1));
+    expect(attr(transport.spans.single, 'error.type'), 'TimeoutException');
+    await client.shutdown();
+  });
+
   test('respects ignoreUrls', () async {
     final (client, transport) =
         await startClient(ignoreUrls: [RegExp('/ignored')]);
