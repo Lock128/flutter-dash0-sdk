@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add `Dash0Options.enabled` to start disabled.
+- Errors reported while disabled or sampled out no longer use up the error cap or dedupe window.
+
 ## 0.1.0
 
 - Initial release modeled on dash0-sdk-web.

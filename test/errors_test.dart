@@ -29,6 +29,44 @@ Future<(Dash0Client, FakeTransport)> start({
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('errors while disabled do not use up the cap or dedupe window',
+      () async {
+    final (client, transport) = await start();
+    client.enabled = false;
+    for (var i = 0; i < 150; i++) {
+      client.reportError('same');
+      client.reportError('error $i');
+    }
+    client.enabled = true;
+    client.reportError('same');
+    await client.flush();
+    expect(transport.logs, hasLength(1));
+    expect(attr(transport.logs.single, 'exception.message'), 'same');
+  });
+
+  test('Dash0Options.enabled false starts the client disabled', () async {
+    final transport = FakeTransport();
+    final client = await Dash0Client.start(
+      const Dash0Options(
+        serviceName: 'test',
+        endpoint: testEndpoint,
+        batchSize: 1,
+        enabled: false,
+      ),
+      transport: transport,
+      sessionStore: MemoryStore(),
+      installErrorHandlers: false,
+      observeLifecycle: false,
+    );
+    expect(client.isEnabled, isFalse);
+    client.reportError('early');
+    client.enabled = true;
+    client.reportError('later');
+    await client.flush();
+    expect(transport.logs, hasLength(1));
+    expect(attr(transport.logs.single, 'exception.message'), 'later');
+  });
+
   test('reportError sends an app.error event with exception attributes',
       () async {
     final (client, transport) = await start();

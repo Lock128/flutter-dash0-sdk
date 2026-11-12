@@ -100,6 +100,7 @@ class Dash0Options {
     this.batchSize = 15,
     this.batchDelay = const Duration(seconds: 1),
     this.debug = false,
+    this.enabled = true,
   });
 
   /// Value of `service.name`.
@@ -177,6 +178,11 @@ class Dash0Options {
 
   /// Print SDK diagnostics.
   final bool debug;
+
+  /// Whether the client records signals right after start. Set to false to
+  /// start disabled and switch on later with `Dash0.enabled = true`, without
+  /// recording anything in between.
+  final bool enabled;
 
   /// All configured endpoints.
   List<Dash0Endpoint> get allEndpoints => [

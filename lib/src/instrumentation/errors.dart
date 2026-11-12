@@ -112,6 +112,9 @@ class ErrorInstrumentation {
     Attributes? attributes,
     String? componentStack,
   }) {
+    // Disabled or sampled out clients drop the signal, so they must not use
+    // up the error cap or the dedupe window either.
+    if (!_client.isEnabled || !_client.isSessionSampled) return;
     final message = error.toString();
     if (message.isEmpty || _reported >= _maxErrorsToReport) return;
     if (_client.ignoreRules.isErrorIgnored(message)) {

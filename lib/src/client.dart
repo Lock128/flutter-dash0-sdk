@@ -128,7 +128,7 @@ class Dash0Client with WidgetsBindingObserver {
   late final Batcher<Map<String, Object?>> _spanBatcher;
   late final ErrorInstrumentation _errors = ErrorInstrumentation(this);
   bool _observingLifecycle = false;
-  bool _enabled = true;
+  late bool _enabled = options.enabled;
   bool _sampled;
   bool _shutdown = false;
   String _sessionId;
