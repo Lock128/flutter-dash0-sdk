@@ -45,6 +45,14 @@ enum Dash0Instrumentation {
   /// `dart:io` HTTP clients. Unlike the other values this is opt-in: it is
   /// only active when listed in `Dash0Options.enabledInstrumentations`.
   httpOverrides,
+
+  /// Flutter equivalents of web vitals: app start, time to first frame,
+  /// frame timings, jank and interaction latency, plus `app.vitals` events.
+  /// Metrics are only recorded while [metrics] is enabled too.
+  vitals,
+
+  /// Detects rapid repeated taps and sends `app.rage_click` events.
+  rageClicks,
 }
 
 /// How metric values are reported over time.
@@ -100,6 +108,66 @@ class Dash0PageViewMeta {
 /// parts with `REDACTED` instead of dropping them.
 typedef UrlScrubber = String Function(String url);
 
+/// Thresholds of the vitals instrumentation.
+class Dash0VitalsOptions {
+  const Dash0VitalsOptions({
+    this.slowFrameThreshold = const Duration(microseconds: 16700),
+    this.frozenFrameThreshold = const Duration(milliseconds: 700),
+  });
+
+  /// Frames taking longer are counted in `app.frame.slow`.
+  final Duration slowFrameThreshold;
+
+  /// Frames taking longer are counted in `app.frame.frozen`.
+  final Duration frozenFrameThreshold;
+
+  void validate() {
+    if (slowFrameThreshold <= Duration.zero) {
+      throw ArgumentError.value(
+          slowFrameThreshold, 'slowFrameThreshold', 'must be positive');
+    }
+    if (frozenFrameThreshold < slowFrameThreshold) {
+      throw ArgumentError.value(frozenFrameThreshold, 'frozenFrameThreshold',
+          'must not be below slowFrameThreshold');
+    }
+  }
+}
+
+/// Settings of the rage click detection.
+class Dash0RageClickOptions {
+  const Dash0RageClickOptions({
+    this.tapCount = 3,
+    this.radius = 40,
+    this.window = const Duration(seconds: 1),
+    this.enableDeadTaps = false,
+  });
+
+  /// Number of taps that make a rage click.
+  final int tapCount;
+
+  /// Maximum distance in logical pixels between the taps.
+  final double radius;
+
+  /// All taps must happen within this time.
+  final Duration window;
+
+  /// Also send `app.dead_tap` for taps that hit nothing tappable. This is a
+  /// heuristic and off by default.
+  final bool enableDeadTaps;
+
+  void validate() {
+    if (tapCount < 2) {
+      throw ArgumentError.value(tapCount, 'tapCount', 'must be at least 2');
+    }
+    if (radius <= 0) {
+      throw ArgumentError.value(radius, 'radius', 'must be positive');
+    }
+    if (window <= Duration.zero) {
+      throw ArgumentError.value(window, 'window', 'must be positive');
+    }
+  }
+}
+
 /// Options for `Dash0.init`.
 class Dash0Options {
   const Dash0Options({
@@ -132,6 +200,8 @@ class Dash0Options {
     this.metricExportInterval = const Duration(seconds: 30),
     this.metricTemporality = Dash0AggregationTemporality.delta,
     this.compression = Dash0Compression.gzip,
+    this.vitals = const Dash0VitalsOptions(),
+    this.rageClicks = const Dash0RageClickOptions(),
   });
 
   /// Value of `service.name`.
@@ -225,6 +295,12 @@ class Dash0Options {
   /// Compression of request bodies. Bodies below 1 KiB are never compressed.
   final Dash0Compression compression;
 
+  /// Thresholds of the vitals instrumentation.
+  final Dash0VitalsOptions vitals;
+
+  /// Settings of the rage click detection.
+  final Dash0RageClickOptions rageClicks;
+
   /// All configured endpoints.
   List<Dash0Endpoint> get allEndpoints => [
         if (endpoint != null) endpoint!,
@@ -287,5 +363,7 @@ class Dash0Options {
         'must be at least 1 second',
       );
     }
+    vitals.validate();
+    rageClicks.validate();
   }
 }

@@ -71,6 +71,7 @@ void trackScreenView(
   if (!client.options.isEnabled(Dash0Instrumentation.navigation)) return;
   final previous = client.currentScreen;
   if (previous == screenName) return;
+  client.vitals?.onScreenChange();
   client.currentScreen = screenName;
 
   final meta = _safeMeta(client, screenName);

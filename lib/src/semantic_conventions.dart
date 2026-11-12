@@ -64,6 +64,30 @@ const serverPort = 'server.port';
 // Metric names
 const metricHttpClientRequestDuration = 'http.client.request.duration';
 
+// Vitals metrics
+const metricAppStartDuration = 'app.start.duration';
+const metricScreenTtff = 'app.screen.ttff';
+const metricInteractionLatency = 'app.interaction.latency';
+const metricFrameBuildDuration = 'app.frame.build.duration';
+const metricFrameRasterDuration = 'app.frame.raster.duration';
+const metricFrameSlow = 'app.frame.slow';
+const metricFrameFrozen = 'app.frame.frozen';
+
+// app.vitals event attributes
+const vitalsTtffMs = 'app.vitals.ttff_ms';
+const vitalsFramesTotal = 'app.vitals.frames_total';
+const vitalsFramesSlow = 'app.vitals.frames_slow';
+const vitalsFramesFrozen = 'app.vitals.frames_frozen';
+const vitalsInteractions = 'app.vitals.interactions';
+const vitalsInteractionP98Ms = 'app.vitals.interaction_p98_ms';
+const vitalsTrigger = 'app.vitals.trigger';
+
+// Rage click and dead tap event attributes
+const clickX = 'app.click.x';
+const clickY = 'app.click.y';
+const clickCount = 'app.click.count';
+const clickTarget = 'app.click.target';
+
 /// Event names reserved for the SDK. Custom events may not use them.
 class EventNames {
   EventNames._();
@@ -72,7 +96,18 @@ class EventNames {
   static const error = 'app.error';
   static const lifecycle = 'app.lifecycle';
 
-  static const all = <String>{pageView, error, lifecycle};
+  static const vitals = 'app.vitals';
+  static const rageClick = 'app.rage_click';
+  static const deadTap = 'app.dead_tap';
+
+  static const all = <String>{
+    pageView,
+    error,
+    lifecycle,
+    vitals,
+    rageClick,
+    deadTap,
+  };
 }
 
 const spanEventNameException = 'exception';

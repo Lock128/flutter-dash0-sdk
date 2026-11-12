@@ -9,6 +9,8 @@ import 'ids.dart';
 import 'ignore_rules.dart';
 import 'instrumentation/errors.dart';
 import 'instrumentation/http_overrides.dart';
+import 'instrumentation/rage_clicks.dart';
+import 'instrumentation/vitals.dart';
 import 'metrics/instruments.dart';
 import 'metrics/registry.dart';
 import 'options.dart';
@@ -64,6 +66,7 @@ class Dash0Client with WidgetsBindingObserver {
     bool observeLifecycle = true,
     bool installErrorHandlers = true,
     bool installHttpOverrides = true,
+    bool installUiInstrumentation = true,
     int Function()? nowMillis,
   }) async {
     options.validate();
@@ -119,6 +122,14 @@ class Dash0Client with WidgetsBindingObserver {
         options.isExplicitlyEnabled(Dash0Instrumentation.httpOverrides)) {
       client.installHttpOverrides();
     }
+    if (installUiInstrumentation) {
+      if (options.isEnabled(Dash0Instrumentation.vitals)) {
+        client.vitals = VitalsInstrumentation(client)..install();
+      }
+      if (options.isEnabled(Dash0Instrumentation.rageClicks)) {
+        client._rageClicks = RageClickInstrumentation(client)..install();
+      }
+    }
     dash0Debug('Initialized', 'session=$sessionId sampled=${client._sampled}');
     return client;
   }
@@ -144,6 +155,7 @@ class Dash0Client with WidgetsBindingObserver {
     temporality: options.metricTemporality,
     onInstrumentCreated: _ensureMetricTimer,
   );
+  RageClickInstrumentation? _rageClicks;
   Timer? _metricTimer;
   Dash0Histogram? _httpDuration;
   bool _httpOverridesInstalled = false;
@@ -156,6 +168,10 @@ class Dash0Client with WidgetsBindingObserver {
   /// Name of the screen currently shown, set by the navigation
   /// instrumentation and added to all signals.
   String? currentScreen;
+
+  /// The vitals instrumentation, null when disabled. Public for
+  /// instrumentations.
+  VitalsInstrumentation? vitals;
 
   String get sessionId => _sessionId;
 
@@ -559,6 +575,7 @@ class Dash0Client with WidgetsBindingObserver {
         _sampled = isSessionSampledIn(_sessionId, options.sessionSamplingRate);
       }
     }
+    if (background) vitals?.flushScreen('background');
     _logBatcher.immediate = background;
     _spanBatcher.immediate = background;
     if (!options.isEnabled(Dash0Instrumentation.lifecycle)) return;
@@ -577,6 +594,8 @@ class Dash0Client with WidgetsBindingObserver {
     _metricTimer?.cancel();
     _metricTimer = null;
     uninstallHttpOverrides();
+    vitals?.uninstall();
+    _rageClicks?.uninstall();
     _errors.uninstall();
     if (_observingLifecycle) {
       WidgetsBinding.instance.removeObserver(this);

@@ -8,6 +8,9 @@ export 'src/ids.dart' show generateSpanId, generateTraceId, isSessionSampledIn;
 export 'src/instrumentation/http_client.dart' show Dash0HttpClient;
 export 'src/instrumentation/http_overrides.dart' show Dash0HttpOverrides;
 export 'src/instrumentation/navigation.dart' show Dash0NavigatorObserver;
+export 'src/instrumentation/rage_clicks.dart'
+    show RageClick, RageClickDetector, RageClickInstrumentation;
+export 'src/instrumentation/vitals.dart' show VitalsInstrumentation, percentile;
 export 'src/metrics/instruments.dart'
     show
         Dash0Counter,
@@ -27,6 +30,8 @@ export 'src/options.dart'
         Dash0PageViewMeta,
         Dash0Propagator,
         Dash0PropagatorType,
+        Dash0RageClickOptions,
+        Dash0VitalsOptions,
         UrlScrubber;
 export 'src/otlp.dart' show Attributes;
 export 'src/propagation.dart' show formatTraceparent, parseTraceparent;

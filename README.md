@@ -205,6 +205,26 @@ Request bodies of 1 KiB or more are gzip compressed and sent with `Content-Encod
 (`compression: Dash0Compression.gzip`, the default). Set `compression: Dash0Compression.none` to disable it. On
 web, where `dart:io` is unavailable, bodies are always sent uncompressed (the browser controls the transfer). Make sure your collector accepts gzip, Dash0 does.
 
+### Web vitals equivalents
+
+Enabled by `Dash0Instrumentation.vitals` (on by default). Metrics additionally need `Dash0Instrumentation.metrics`.
+
+| Web vital | Flutter equivalent |
+| --- | --- |
+| LCP | `app.start.duration` (SDK start to first frame, ms) and `app.screen.ttff` (screen change to first frame, ms) |
+| INP | `app.interaction.latency` histogram (pointer up to next frame, ms), p98 per screen in `app.vitals` |
+| CLS | not applicable, replaced by frame jank: `app.frame.slow` (over 16.7 ms) and `app.frame.frozen` (over 700 ms) counters |
+| FID | not applicable |
+| FPS | `app.frame.build.duration` and `app.frame.raster.duration` histograms |
+
+An `app.vitals` event with `app.vitals.ttff_ms`, `frames_total`, `frames_slow`, `frames_frozen`, `interactions` and `interaction_p98_ms` is sent when the screen changes (needs the navigation instrumentation) and when the app goes to the background. Thresholds are configurable with `Dash0VitalsOptions`. Call `Dash0.client?.vitals?.markInteraction()` for custom gestures.
+
+Limitations: there is no layout shift concept in Flutter. Frame timings come from `SchedulerBinding.addTimingsCallback`, which may report nothing on some web renderers, in which case the vitals stay empty. Interaction latency is measured with the SDK clock when the timing callback runs, so it can be slightly higher than the real value.
+
+### Rage clicks
+
+`Dash0Instrumentation.rageClicks` (on by default) sends `app.rage_click` when `tapCount` (3) taps land within `radius` (40 logical px) within `window` (1 s). Attributes: `app.screen.name`, `app.click.x`, `app.click.y` (rounded), `app.click.count` and `app.click.target` (render object type, never text). One burst sends one event. Set `Dash0RageClickOptions(enableDeadTaps: true)` to also send `app.dead_tap` for taps that hit nothing tappable (heuristic).
+
 ### Errors
 
 `Dash0.init` hooks `FlutterError.onError` and `PlatformDispatcher.instance.onError` and still calls the handlers that
