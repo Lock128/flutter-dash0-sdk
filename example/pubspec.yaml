@@ -1,0 +1,17 @@
+name: dash0_flutter_sdk_example
+description: Example app for dash0_flutter_sdk.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.0
+  dash0_flutter_sdk:
+    path: ../
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
