@@ -3,12 +3,13 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'compression.dart';
 import 'debug.dart';
 import 'options.dart';
 
 /// Sends OTLP/JSON payloads to the configured endpoints.
 abstract class Dash0Transport {
-  /// Sends [body] to [path] (`/v1/traces` or `/v1/logs`). Must not throw.
+  /// Sends [body] to [path] (`/v1/traces`, `/v1/logs` or `/v1/metrics`). Must not throw.
   Future<void> send(String path, Map<String, Object?> body);
 
   void close();
@@ -21,13 +22,20 @@ class HttpDash0Transport implements Dash0Transport {
     this.endpoints, {
     http.Client? client,
     this.timeout = const Duration(seconds: 10),
+    this.compression = Dash0Compression.gzip,
   })  : _client = client ?? http.Client(),
         _ownsClient = client == null;
 
   final List<Dash0Endpoint> endpoints;
   final Duration timeout;
+
+  /// Bodies smaller than [minCompressionBytes] are sent uncompressed.
+  final Dash0Compression compression;
   final http.Client _client;
   final bool _ownsClient;
+
+  /// Smallest body that is compressed.
+  static const minCompressionBytes = 1024;
 
   /// Builds the request URL for [endpoint] and [path].
   static Uri buildUri(Dash0Endpoint endpoint, String path) {
@@ -55,11 +63,32 @@ class HttpDash0Transport implements Dash0Transport {
       dash0Warn('Unable to encode telemetry for $path:', e);
       return;
     }
+    final Object requestBody;
+    final bool gzipped;
+    final bytes = utf8.encode(payload);
+    final compressed = compression == Dash0Compression.gzip &&
+            bytes.length >= minCompressionBytes
+        ? gzipEncode(bytes)
+        : null;
+    if (compressed != null) {
+      requestBody = compressed;
+      gzipped = true;
+    } else {
+      requestBody = payload;
+      gzipped = false;
+    }
     await Future.wait(endpoints.map((endpoint) async {
       final uri = buildUri(endpoint, path);
       try {
         final response = await _client
-            .post(uri, headers: buildHeaders(endpoint), body: payload)
+            .post(
+              uri,
+              headers: {
+                ...buildHeaders(endpoint),
+                if (gzipped) 'Content-Encoding': 'gzip',
+              },
+              body: requestBody,
+            )
             .timeout(timeout);
         if (response.statusCode < 200 || response.statusCode >= 300) {
           dash0Warn('Failed to send telemetry to $uri: ${response.statusCode}');

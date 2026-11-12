@@ -6,9 +6,21 @@ export 'src/client.dart' show Dash0Client, dash0SdkVersion;
 export 'src/dash0.dart' show Dash0;
 export 'src/ids.dart' show generateSpanId, generateTraceId, isSessionSampledIn;
 export 'src/instrumentation/http_client.dart' show Dash0HttpClient;
+export 'src/instrumentation/http_overrides.dart' show Dash0HttpOverrides;
 export 'src/instrumentation/navigation.dart' show Dash0NavigatorObserver;
+export 'src/metrics/instruments.dart'
+    show
+        Dash0Counter,
+        Dash0Gauge,
+        Dash0Histogram,
+        Dash0Instrument,
+        Dash0UpDownCounter,
+        defaultHistogramBoundaries,
+        maxSeriesPerInstrument;
 export 'src/options.dart'
     show
+        Dash0AggregationTemporality,
+        Dash0Compression,
         Dash0Endpoint,
         Dash0Instrumentation,
         Dash0Options,

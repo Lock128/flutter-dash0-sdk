@@ -36,6 +36,34 @@ enum Dash0Instrumentation {
 
   /// App lifecycle events and flushing when the app goes to the background.
   lifecycle,
+
+  /// Automatic metrics such as `http.client.request.duration`. The manual
+  /// metrics API (`Dash0.counter` and friends) works regardless.
+  metrics,
+
+  /// Installs `Dash0HttpOverrides` during `Dash0.init`, which instruments all
+  /// `dart:io` HTTP clients. Unlike the other values this is opt-in: it is
+  /// only active when listed in `Dash0Options.enabledInstrumentations`.
+  httpOverrides,
+}
+
+/// How metric values are reported over time.
+enum Dash0AggregationTemporality {
+  /// Each export contains only what happened since the previous export.
+  delta,
+
+  /// Each export contains totals since the app started.
+  cumulative,
+}
+
+/// Compression applied to request bodies.
+enum Dash0Compression {
+  /// Send uncompressed JSON.
+  none,
+
+  /// Send gzip compressed JSON with `Content-Encoding: gzip`. Falls back to
+  /// uncompressed bodies on platforms without `dart:io` (web).
+  gzip,
 }
 
 /// Header types a [Dash0Propagator] can send.
@@ -101,6 +129,9 @@ class Dash0Options {
     this.batchDelay = const Duration(seconds: 1),
     this.debug = false,
     this.enabled = true,
+    this.metricExportInterval = const Duration(seconds: 30),
+    this.metricTemporality = Dash0AggregationTemporality.delta,
+    this.compression = Dash0Compression.gzip,
   });
 
   /// Value of `service.name`.
@@ -184,6 +215,16 @@ class Dash0Options {
   /// recording anything in between.
   final bool enabled;
 
+  /// How often aggregated metrics are exported. Metrics are also exported on
+  /// flush, when the app goes to the background and on shutdown.
+  final Duration metricExportInterval;
+
+  /// Aggregation temporality of sums and histograms.
+  final Dash0AggregationTemporality metricTemporality;
+
+  /// Compression of request bodies. Bodies below 1 KiB are never compressed.
+  final Dash0Compression compression;
+
   /// All configured endpoints.
   List<Dash0Endpoint> get allEndpoints => [
         if (endpoint != null) endpoint!,
@@ -194,6 +235,11 @@ class Dash0Options {
   bool isEnabled(Dash0Instrumentation instrumentation) =>
       enabledInstrumentations == null ||
       enabledInstrumentations!.contains(instrumentation);
+
+  /// Whether [instrumentation] is listed in [enabledInstrumentations]. Used
+  /// for opt-in instrumentations.
+  bool isExplicitlyEnabled(Dash0Instrumentation instrumentation) =>
+      enabledInstrumentations?.contains(instrumentation) ?? false;
 
   /// The service name after the suspicious value check.
   String get effectiveServiceName {
@@ -233,6 +279,13 @@ class Dash0Options {
     }
     if (batchSize < 1) {
       throw ArgumentError.value(batchSize, 'batchSize', 'must be at least 1');
+    }
+    if (metricExportInterval < const Duration(seconds: 1)) {
+      throw ArgumentError.value(
+        metricExportInterval,
+        'metricExportInterval',
+        'must be at least 1 second',
+      );
     }
   }
 }

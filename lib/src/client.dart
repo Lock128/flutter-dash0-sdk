@@ -8,6 +8,9 @@ import 'debug.dart';
 import 'ids.dart';
 import 'ignore_rules.dart';
 import 'instrumentation/errors.dart';
+import 'instrumentation/http_overrides.dart';
+import 'metrics/instruments.dart';
+import 'metrics/registry.dart';
 import 'options.dart';
 import 'otlp.dart';
 import 'rate_limiter.dart';
@@ -60,6 +63,7 @@ class Dash0Client with WidgetsBindingObserver {
     Dash0KeyValueStore? sessionStore,
     bool observeLifecycle = true,
     bool installErrorHandlers = true,
+    bool installHttpOverrides = true,
     int Function()? nowMillis,
   }) async {
     options.validate();
@@ -91,7 +95,11 @@ class Dash0Client with WidgetsBindingObserver {
 
     final client = Dash0Client._(
       options,
-      transport ?? HttpDash0Transport(options.allEndpoints),
+      transport ??
+          HttpDash0Transport(
+            options.allEndpoints,
+            compression: options.compression,
+          ),
       sessions,
       IgnoreRules(
         ignoreUrls: options.ignoreUrls,
@@ -106,6 +114,10 @@ class Dash0Client with WidgetsBindingObserver {
     }
     if (installErrorHandlers && options.isEnabled(Dash0Instrumentation.error)) {
       client._errors.install();
+    }
+    if (installHttpOverrides &&
+        options.isExplicitlyEnabled(Dash0Instrumentation.httpOverrides)) {
+      client.installHttpOverrides();
     }
     dash0Debug('Initialized', 'session=$sessionId sampled=${client._sampled}');
     return client;
@@ -127,6 +139,14 @@ class Dash0Client with WidgetsBindingObserver {
   late final Batcher<Map<String, Object?>> _logBatcher;
   late final Batcher<Map<String, Object?>> _spanBatcher;
   late final ErrorInstrumentation _errors = ErrorInstrumentation(this);
+  late final MetricsRegistry _metrics = MetricsRegistry(
+    accepts: _accepts,
+    temporality: options.metricTemporality,
+    onInstrumentCreated: _ensureMetricTimer,
+  );
+  Timer? _metricTimer;
+  Dash0Histogram? _httpDuration;
+  bool _httpOverridesInstalled = false;
   bool _observingLifecycle = false;
   late bool _enabled = options.enabled;
   bool _sampled;
@@ -345,6 +365,93 @@ class Dash0Client with WidgetsBindingObserver {
   }
 
   // ---------------------------------------------------------------------
+  // Metrics
+
+  /// A monotonic sum, for example the number of requests. Calling this again
+  /// with the same name returns the same instrument.
+  Dash0Counter counter(String name, {String? unit, String? description}) =>
+      _metrics.counter(name, unit: unit, description: description);
+
+  /// A sum that can also decrease, for example open connections.
+  Dash0UpDownCounter upDownCounter(String name,
+          {String? unit, String? description}) =>
+      _metrics.upDownCounter(name, unit: unit, description: description);
+
+  /// A distribution of values with explicit bucket [boundaries].
+  Dash0Histogram histogram(
+    String name, {
+    String? unit,
+    String? description,
+    List<double>? boundaries,
+  }) =>
+      _metrics.histogram(name,
+          unit: unit, description: description, boundaries: boundaries);
+
+  /// The latest value of something, for example free memory.
+  Dash0Gauge gauge(String name, {String? unit, String? description}) =>
+      _metrics.gauge(name, unit: unit, description: description);
+
+  /// Records `http.client.request.duration` unless the metrics
+  /// instrumentation is off. Public for instrumentations.
+  void recordHttpClientDuration(double seconds, Attributes attributes) {
+    if (!options.isEnabled(Dash0Instrumentation.metrics)) return;
+    (_httpDuration ??= _metrics.histogram(
+      sc.metricHttpClientRequestDuration,
+      unit: 's',
+      description: 'Duration of HTTP client requests.',
+    ))
+        .record(seconds, attributes: attributes);
+  }
+
+  void _ensureMetricTimer() {
+    if (_metricTimer != null || _shutdown) return;
+    _metricTimer = Timer.periodic(options.metricExportInterval, (_) {
+      exportMetrics();
+    });
+  }
+
+  /// Sends the aggregated metrics now. With delta temporality the
+  /// aggregation starts over.
+  void exportMetrics() {
+    final metrics = _metrics.collect();
+    if (metrics.isEmpty) return;
+    if (_rateLimiter.isExcessiveUsage()) {
+      dash0Debug('Transport rate limit. Will not send metrics.');
+      return;
+    }
+    _dispatch('/v1/metrics', {
+      'resourceMetrics': [
+        {
+          'resource': resource,
+          'scopeMetrics': [
+            {
+              'scope': _scope,
+              'metrics': metrics,
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // HTTP capture
+
+  /// Instruments all `dart:io` HTTP clients, see `Dash0HttpOverrides`. Does
+  /// nothing on web.
+  void installHttpOverrides() {
+    if (_httpOverridesInstalled || !Dash0HttpOverrides.isSupported) return;
+    _httpOverridesInstalled = Dash0HttpOverrides.install(this);
+  }
+
+  /// Removes the overrides installed by [installHttpOverrides].
+  void uninstallHttpOverrides() {
+    if (!_httpOverridesInstalled) return;
+    _httpOverridesInstalled = false;
+    Dash0HttpOverrides.uninstall();
+  }
+
+  // ---------------------------------------------------------------------
   // Transport
 
   /// Queues a log record. Public for instrumentations.
@@ -421,6 +528,7 @@ class Dash0Client with WidgetsBindingObserver {
   Future<void> flush() async {
     _logBatcher.flush();
     _spanBatcher.flush();
+    exportMetrics();
     await Future.wait(_inFlight.toList());
   }
 
@@ -466,6 +574,9 @@ class Dash0Client with WidgetsBindingObserver {
     if (_shutdown) return;
     await flush();
     _shutdown = true;
+    _metricTimer?.cancel();
+    _metricTimer = null;
+    uninstallHttpOverrides();
     _errors.uninstall();
     if (_observingLifecycle) {
       WidgetsBinding.instance.removeObserver(this);

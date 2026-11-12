@@ -98,6 +98,113 @@ matching `ignoreUrls` are not instrumented. Trace headers are only sent to URLs 
 same origin concept in an app, so no headers are sent by default. Requests made inside `Dash0.trace` become child spans
 of it.
 
+#### Capturing more HTTP traffic
+
+| Path | Covers | Notes |
+| --- | --- | --- |
+| `Dash0.httpClient()` / `Dash0HttpClient` | Code that uses this `package:http` client | Works on all platforms including web. |
+| `Dash0HttpOverrides` | Every `dart:io` `HttpClient`: `package:http` `IOClient`, Dio's default adapter, `NetworkImage`, most plugins | Mobile and desktop only. Opt-in. |
+| Dio interceptor | Dio with a custom adapter, web | See below. |
+| Amplify | Amplify API (REST and GraphQL) | See below. |
+
+**HttpOverrides.** Add `Dash0Instrumentation.httpOverrides` to `enabledInstrumentations` (it is not part of the
+default "all", because it changes global behavior) or call `Dash0.installHttpOverrides()` after `Dash0.init`:
+
+```dart
+await Dash0.init(Dash0Options(
+  serviceName: 'my-app',
+  endpoint: ...,
+  enabledInstrumentations: {...Dash0Instrumentation.values},
+));
+```
+
+An `HttpOverrides` that was installed earlier keeps working: the SDK wraps the clients it creates. Requests sent
+through `Dash0HttpClient` are not recorded twice. The spans end when the response body is fully read or fails, so
+a response that is never read does not produce a span. On web `dart:io` is unavailable, install does nothing and
+you should use `Dash0HttpClient` or the Dio interceptor.
+
+**Dio.** Dio uses `dart:io` by default, so `HttpOverrides` already covers it. To instrument Dio on web or with a
+custom adapter, add an interceptor (this package does not depend on Dio):
+
+```dart
+class Dash0DioInterceptor extends Interceptor {
+  static const _key = 'dash0_span';
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final span = Dash0.startSpan('HTTP ${options.method}', attributes: {
+      'http.request.method': options.method,
+      'url.full': options.uri.toString(),
+    });
+    if (span != null) {
+      options.extra[_key] = span;
+      options.headers['traceparent'] = formatTraceparent(span.traceId, span.spanId);
+    }
+    handler.next(options);
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    final span = response.requestOptions.extra[_key] as Dash0Span?;
+    span?.setAttribute('http.response.status_code', response.statusCode);
+    span?.end();
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    final span = err.requestOptions.extra[_key] as Dash0Span?;
+    span?.setAttribute('http.response.status_code', err.response?.statusCode);
+    span?.recordException(err, err.stackTrace);
+    span?.end();
+    handler.next(err);
+  }
+}
+```
+
+If you use both the interceptor and `HttpOverrides`, you get two spans per request; pick one. Only send
+`traceparent` to hosts you trust (the SDK's `propagators` option is not applied by this snippet).
+
+**Amplify.** `APIPluginOptions.baseHttpClient` (amplify_api_dart 0.5.x) takes an `AWSHttpClient` from `aws_common`,
+not a `package:http` client, so `Dash0HttpClient` cannot be plugged in there. On mobile and desktop the default
+`AWSHttpClient` is built on `dart:io`'s `HttpClient`, so `Dash0HttpOverrides` records Amplify API calls (HTTP/1.1
+requests; requests that negotiate HTTP/2 through `package:http2` sockets are not seen). Amplify Auth and Storage
+requests are covered the same way. On web use a custom `AWSHttpClient` wrapper or trace the calls with
+`Dash0.trace`.
+
+Every request recorded by `Dash0HttpClient` or `Dash0HttpOverrides` also records the histogram
+`http.client.request.duration` (seconds) with `http.request.method`, `server.address`, `server.port`,
+`http.response.status_code` and `error.type`. Switch it off by leaving `Dash0Instrumentation.metrics` out of
+`enabledInstrumentations`.
+
+### Metrics
+
+```dart
+final requests = Dash0.counter('app.requests', unit: '1', description: 'Handled requests');
+final queue = Dash0.upDownCounter('app.queue.size');
+final latency = Dash0.histogram('app.checkout.duration', unit: 's');
+final battery = Dash0.gauge('device.battery.level', unit: '1');
+
+requests.add(1, attributes: {'route': '/home'});
+queue.add(-1);
+latency.record(0.42);
+battery.record(0.8);
+```
+
+Create instruments after `Dash0.init` and keep them; asking for the same name again returns the same instrument.
+Values are aggregated in memory and sent to `/v1/metrics` every `metricExportInterval` (30 seconds), on `flush`,
+when the app goes to the background and on shutdown. `metricTemporality` selects `delta` (default, each export
+holds what happened since the last one, good for short lived apps) or `cumulative`. Histograms use explicit
+buckets (default bounds suit durations in seconds, override with `boundaries:`) and report count, sum, min and max.
+Each instrument tracks at most 2000 distinct attribute sets, further sets are dropped. Keep attributes low
+cardinality. Metrics respect `enabled`, session sampling and the rate limit.
+
+### Compression
+
+Request bodies of 1 KiB or more are gzip compressed and sent with `Content-Encoding: gzip` for all signals
+(`compression: Dash0Compression.gzip`, the default). Set `compression: Dash0Compression.none` to disable it. On
+web, where `dart:io` is unavailable, bodies are always sent uncompressed (the browser controls the transfer). Make sure your collector accepts gzip, Dash0 does.
+
 ### Errors
 
 `Dash0.init` hooks `FlutterError.onError` and `PlatformDispatcher.instance.onError` and still calls the handlers that
@@ -140,7 +247,7 @@ await Dash0.shutdown(); // flush, restore error handlers, allow init again
 | `serviceNamespace`, `serviceVersion`, `environment`, `deploymentName`, `deploymentId` | none | Resource attributes (`deployment.environment.name` for `environment`). |
 | `resourceAttributes` | `{}` | Extra resource attributes, for example app build or device model. |
 | `additionalSignalAttributes` | `{}` | Attributes added to every signal. |
-| `enabledInstrumentations` | all | Subset of `navigation`, `error`, `http`, `lifecycle`. |
+| `enabledInstrumentations` | all | Subset of `navigation`, `error`, `http`, `lifecycle`, `metrics`. `httpOverrides` is opt-in: it is only active when listed explicitly. |
 | `sessionSamplingRate` | `100` | Percentage of sessions that send data, 0 to 100. Decided from the session id with CRC32. |
 | `sessionInactivityTimeout` | 3 hours | Maximum idle time between app starts or resumes. Capped at 24 hours. |
 | `sessionTerminationTimeout` | 6 hours | Maximum session age. Capped at 24 hours. |
@@ -152,6 +259,9 @@ await Dash0.shutdown(); // flush, restore error handlers, allow init again
 | `screenNameResolver` | route name | Custom mapping from `Route` to screen name. |
 | `generatePageViewMetadata` | none | Custom title and attributes per page view. |
 | `batchSize`, `batchDelay` | `15`, 1 second | Batching of signals. |
+| `metricExportInterval` | 30 seconds | How often metrics are exported, at least 1 second. |
+| `metricTemporality` | `delta` | `Dash0AggregationTemporality.delta` or `cumulative`. |
+| `compression` | `gzip` | `Dash0Compression.gzip` or `none`. Bodies under 1 KiB are never compressed. |
 | `debug` | `false` | Print SDK diagnostics. |
 
 ## Sessions and resources

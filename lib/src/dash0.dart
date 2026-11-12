@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'client.dart';
 import 'instrumentation/http_client.dart';
+import 'metrics/instruments.dart';
 import 'instrumentation/navigation.dart';
 import 'options.dart';
 import 'otlp.dart';
@@ -63,6 +64,42 @@ class Dash0 {
     if (c == null) return inner ?? http.Client();
     return Dash0HttpClient(c, inner);
   }
+
+  /// Instruments all `dart:io` HTTP clients (including `package:http`'s
+  /// `IOClient`, Dio and most plugins). Does nothing on web or before [init].
+  static void installHttpOverrides() => _client?.installHttpOverrides();
+
+  /// Removes the overrides installed by [installHttpOverrides].
+  static void uninstallHttpOverrides() => _client?.uninstallHttpOverrides();
+
+  /// A monotonic sum. Before [init] a counter that records nothing is
+  /// returned. Obtain instruments after [init] and keep them.
+  static Dash0Counter counter(String name,
+          {String? unit, String? description}) =>
+      _client?.counter(name, unit: unit, description: description) ??
+      Dash0Counter.noop(name);
+
+  /// A sum that can go up and down.
+  static Dash0UpDownCounter upDownCounter(String name,
+          {String? unit, String? description}) =>
+      _client?.upDownCounter(name, unit: unit, description: description) ??
+      Dash0UpDownCounter.noop(name);
+
+  /// A distribution of values, for example durations in seconds.
+  static Dash0Histogram histogram(
+    String name, {
+    String? unit,
+    String? description,
+    List<double>? boundaries,
+  }) =>
+      _client?.histogram(name,
+          unit: unit, description: description, boundaries: boundaries) ??
+      Dash0Histogram.noop(name);
+
+  /// The latest value of something.
+  static Dash0Gauge gauge(String name, {String? unit, String? description}) =>
+      _client?.gauge(name, unit: unit, description: description) ??
+      Dash0Gauge.noop(name);
 
   /// Runs [body] in a guarded zone that reports uncaught errors.
   static R? runGuarded<R>(R Function() body) {

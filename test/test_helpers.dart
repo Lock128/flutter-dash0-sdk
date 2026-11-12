@@ -46,3 +46,13 @@ Object? attr(Map<String, Object?> signal, String key) {
   }
   return null;
 }
+
+extension FakeTransportMetrics on FakeTransport {
+  /// All metrics sent so far.
+  List<Map<String, Object?>> get metrics => [
+        for (final s in sent.where((s) => s.path == '/v1/metrics'))
+          for (final rm in s.body['resourceMetrics']! as List)
+            for (final sm in (rm as Map)['scopeMetrics'] as List)
+              ...((sm as Map)['metrics'] as List).cast<Map<String, Object?>>(),
+      ];
+}

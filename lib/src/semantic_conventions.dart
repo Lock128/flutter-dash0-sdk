@@ -58,6 +58,11 @@ const httpRequestHeader = 'http.request.header';
 const httpResponseStatusCode = 'http.response.status_code';
 const httpResponseHeader = 'http.response.header';
 const httpResponseBodySize = 'http.response.body.size';
+const serverAddress = 'server.address';
+const serverPort = 'server.port';
+
+// Metric names
+const metricHttpClientRequestDuration = 'http.client.request.duration';
 
 /// Event names reserved for the SDK. Custom events may not use them.
 class EventNames {
