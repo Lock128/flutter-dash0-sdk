@@ -22,13 +22,10 @@ const osName = 'os.name';
 const eventName = 'event.name';
 const eventTitle = 'dash0.app.event.title';
 const eventId = 'dash0.app.event.id';
-const requestCancelled = 'dash0.app.request.cancelled';
 const _legacyEventTitle = eventTitle;
 const _legacyEventId = eventId;
-const _legacyRequestCancelled = requestCancelled;
 const webEventTitle = 'dash0.web.event.title';
 const webEventId = 'dash0.web.event.id';
-const webRequestCancelled = 'dash0.web.request.cancelled';
 const sessionId = 'session.id';
 const appInstanceId = 'app.instance.id';
 const appScreenName = 'app.screen.name';
@@ -162,7 +159,6 @@ class Dash0Names {
     required this.rageClick,
     required this.eventTitle,
     required this.eventId,
-    required this.requestCancelled,
   });
 
   /// Scope name and `telemetry.sdk.name`.
@@ -172,7 +168,6 @@ class Dash0Names {
   final String rageClick;
   final String eventTitle;
   final String eventId;
-  final String requestCancelled;
 
   /// Names of dash0-sdk-web (default).
   static const web = Dash0Names._(
@@ -182,7 +177,6 @@ class Dash0Names {
     rageClick: EventNames.webRageClick,
     eventTitle: webEventTitle,
     eventId: webEventId,
-    requestCancelled: webRequestCancelled,
   );
 
   /// Names of SDK versions before 0.3.0.
@@ -193,7 +187,6 @@ class Dash0Names {
     rageClick: EventNames.rageClick,
     eventTitle: _legacyEventTitle,
     eventId: _legacyEventId,
-    requestCancelled: _legacyRequestCancelled,
   );
 }
 

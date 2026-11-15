@@ -188,6 +188,18 @@ void main() {
       await client.shutdown();
     });
 
+    test('are not emitted with legacyAppNames', () async {
+      final (client, transport) = await start(legacy: true);
+      screen(client, 'home');
+      frame(client, 10);
+      client.vitals!.markInteraction();
+      frame(client, 10);
+      screen(client, 'detail');
+      await client.flush();
+      expect(named(transport, 'browser.web_vital'), isEmpty);
+      await client.shutdown();
+    });
+
     test('are not emitted when vitals are disabled', () async {
       final (client, transport) =
           await start(only: {Dash0Instrumentation.navigation});

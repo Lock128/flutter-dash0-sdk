@@ -236,8 +236,8 @@ Since 0.3.0 the SDK emits the names that dash0-sdk-web uses, so that the data ca
 | Page view event | `browser.page_view` | `app.page_view` |
 | Error event | `browser.error` | `app.error` |
 | Rage click event | `browser.rage_click` | `app.rage_click` |
-| Web vital event | `browser.web_vital` (`LCP`, `INP`) | same |
-| Event title / id / cancelled | `dash0.web.event.title`, `dash0.web.event.id`, `dash0.web.request.cancelled` | `dash0.app.event.*`, `dash0.app.request.cancelled` |
+| Web vital event | `browser.web_vital` (`LCP`, `INP`) | not sent |
+| Event title / id | `dash0.web.event.title`, `dash0.web.event.id` | `dash0.app.event.*` |
 | Page URL | `page.url.full`, `.scheme`, `.domain`, `.path` | same |
 
 `page.url.*` is added to every signal once a screen is known: `page.url.full` is `app://<screen>` (a leading `/` of the route name is dropped, so `/details` becomes `app://details`), `page.url.scheme` is `app`, `page.url.domain` is the service name and `page.url.path` is `/<screen>`. The full URL goes through `urlScrubber`. `app.screen.name` and `app.instance.id` are kept.

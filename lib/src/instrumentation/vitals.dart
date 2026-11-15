@@ -199,9 +199,12 @@ class VitalsInstrumentation {
         );
         // Web vitals compatible events. Flutter approximations: LCP is the
         // time to first frame of the screen, INP the p98 interaction latency.
-        if (ttff != null) _emitWebVital('LCP', _round(ttff));
-        if (_interactions.isNotEmpty) {
-          _emitWebVital('INP', _round(percentile(_interactions, 98)));
+        // Not sent with `legacyAppNames`, which keeps the 0.2.0 output.
+        if (!client.options.legacyAppNames) {
+          if (ttff != null) _emitWebVital('LCP', _round(ttff));
+          if (_interactions.isNotEmpty) {
+            _emitWebVital('INP', _round(percentile(_interactions, 98)));
+          }
         }
       }
     } catch (e) {
