@@ -111,7 +111,7 @@ class _HomePageState extends State<HomePage> {
           ),
           GestureDetector(
             // Counts as a metric; tapping it 3 times quickly sends an
-            // app.rage_click event.
+            // browser.rage_click event.
             onTap: () {
               setState(() => _taps++);
               Dash0.counter('example.button.taps', unit: '{tap}').add(1);

@@ -12,11 +12,11 @@ package.
   `Dash0-Dataset` headers, rate limiting and flushing when the app goes to the background.
 - Sessions that are persisted across app starts (inactivity and maximum age timeouts) with deterministic per-session
   sampling (`sessionSamplingRate`).
-- Navigation: `Dash0NavigatorObserver` sends `app.page_view` events. Works with `Navigator`, `MaterialApp` and
+- Navigation: `Dash0NavigatorObserver` sends `browser.page_view` events. Works with `Navigator`, `MaterialApp` and
   `go_router`.
 - HTTP: `Dash0HttpClient` wraps a `package:http` client, creates client spans with OpenTelemetry HTTP attributes and
   injects W3C `traceparent` (or AWS X-Ray) headers.
-- Errors: `FlutterError.onError` and `PlatformDispatcher.onError` are captured and sent as `app.error` events with
+- Errors: `FlutterError.onError` and `PlatformDispatcher.onError` are captured and sent as `browser.error` events with
   sanitized stack traces. `Dash0.runGuarded` covers zones.
 - App lifecycle events (`app.lifecycle`).
 - Metrics, gzip compression, `dart:io` HTTP capture, web vitals equivalents, rage clicks, session replay and
@@ -226,9 +226,31 @@ An `app.vitals` event with `app.vitals.ttff_ms`, `frames_total`, `frames_slow`, 
 
 Limitations: there is no layout shift concept in Flutter. Frame timings come from `SchedulerBinding.addTimingsCallback`, which may report nothing on some web renderers, in which case the vitals stay empty. App start, time to first frame and interaction latency are measured with the SDK clock when the batched timing callback runs, so they can be higher than the real values by the batching delay. Frames seen while the SDK is disabled (for example while waiting for a feature flag) are not measured, and `app.start.duration` is not reported in that case; time to first frame then counts from the last unmeasured frame.
 
+### Web Events compatibility
+
+Since 0.3.0 the SDK emits the names that dash0-sdk-web uses, so that the data can show up next to website data in Dash0 Web Events. This is the default. Set `Dash0Options(legacyAppNames: true)` for the `app.*` names of 0.2.0 and earlier.
+
+| Signal | Web SDK and default here | `legacyAppNames: true` |
+| --- | --- | --- |
+| Scope name, `telemetry.sdk.name` | `dash0-web-sdk` | `dash0-flutter-sdk` |
+| Page view event | `browser.page_view` | `app.page_view` |
+| Error event | `browser.error` | `app.error` |
+| Rage click event | `browser.rage_click` | `app.rage_click` |
+| Web vital event | `browser.web_vital` (`LCP`, `INP`) | same |
+| Event title / id / cancelled | `dash0.web.event.title`, `dash0.web.event.id`, `dash0.web.request.cancelled` | `dash0.app.event.*`, `dash0.app.request.cancelled` |
+| Page URL | `page.url.full`, `.scheme`, `.domain`, `.path` | same |
+
+`page.url.*` is added to every signal once a screen is known: `page.url.full` is `app://<screen>` (a leading `/` of the route name is dropped, so `/details` becomes `app://details`), `page.url.scheme` is `app`, `page.url.domain` is the service name and `page.url.path` is `/<screen>`. The full URL goes through `urlScrubber`. `app.screen.name` and `app.instance.id` are kept.
+
+Flutter specific signals keep their `app.*` names in both modes: `app.vitals`, `app.lifecycle`, `app.dead_tap`, `app.long_task`, `app.session_replay` (not `browser.session_recording`, the payload differs), and all `app.*` metrics.
+
+`browser.web_vital` log records have a body with `name`, `value` (ms) and `delta` (equal to `value`) and are sent together with `app.vitals` when a screen is left or the app goes to the background. They are Flutter approximations: `LCP` is the time to first frame of the screen and `INP` is the p98 interaction latency of the screen. `CLS` is not sent because Flutter has no equivalent.
+
+Caveat: the Dash0 documentation does not state which fields classify data as a website. The `browser.*` names, the `dash0-web-sdk` scope and `page.url.*` are the best inference from dash0-sdk-web. Check the Web Events Explorer after deploying. If the events do not appear, ask Dash0 support how a third-party SDK can be recognized as a website. Data stays in the dataset of the environment you configure, so web and app data are separate unless you send them to the same one.
+
 ### Rage clicks
 
-`Dash0Instrumentation.rageClicks` (on by default) sends `app.rage_click` when `tapCount` (3) taps (pointer up within 18 px of the pointer down, so drags and scrolls do not count) land within `radius` (40 logical px) within `window` (1 s). Attributes: `app.screen.name`, `app.click.x`, `app.click.y` (rounded), `app.click.count` and `app.click.target` (render object type, never text). One burst sends one event. Set `Dash0RageClickOptions(enableDeadTaps: true)` to also send `app.dead_tap` for taps that hit nothing tappable (heuristic).
+`Dash0Instrumentation.rageClicks` (on by default) sends `browser.rage_click` when `tapCount` (3) taps (pointer up within 18 px of the pointer down, so drags and scrolls do not count) land within `radius` (40 logical px) within `window` (1 s). Attributes: `app.screen.name`, `app.click.x`, `app.click.y` (rounded), `app.click.count` and `app.click.target` (render object type, never text). One burst sends one event. Set `Dash0RageClickOptions(enableDeadTaps: true)` to also send `app.dead_tap` for taps that hit nothing tappable (heuristic).
 
 ### Session replay
 
@@ -331,7 +353,7 @@ Dash0.identify(null); // on logout
 Dash0.addSignalAttribute('tenant', 'acme');
 ```
 
-Event names starting with the SDK's own names (`app.page_view`, `app.error`, `app.lifecycle`) are rejected.
+Event names starting with the SDK's own names (`browser.page_view`, `browser.error`, `browser.rage_click`, `browser.web_vital`, `app.lifecycle` and the other `app.*` SDK events) are rejected.
 
 ### Enable, disable and shutdown
 
@@ -373,7 +395,7 @@ await Dash0.shutdown(); // flush, restore error handlers, allow init again
 A session id (16 hex characters) is stored in `shared_preferences` under `d0_session` and added to every signal as
 `session.id`. Trace ids embed the session id (`d042` + flags + session id + random) and span ids start with the CRC32 of
 the trace id, like in dash0-sdk-web. `app.instance.id` identifies one app launch (the equivalent of `browser.tab.id`).
-The resource contains `service.*`, `deployment.*`, `telemetry.sdk.*` (`dash0-flutter-sdk`, `dart`), `os.type` and
+The resource contains `service.*`, `deployment.*`, `telemetry.sdk.*` (`dash0-web-sdk`, `dart`), `os.type` and
 `app.locale`. Add `app.version`, device information and similar with `resourceAttributes`, for example from
 `package_info_plus`.
 
@@ -388,7 +410,7 @@ telemetry.
 
 | Web SDK | Flutter SDK |
 | --- | --- |
-| `browser.page_view`, `browser.error` events | `app.page_view`, `app.error`, `app.lifecycle` events |
+| `browser.page_view`, `browser.error` events | Same names by default (`legacyAppNames` restores `app.page_view`, `app.error`); `app.lifecycle` is Flutter specific |
 | `fetch` / `XMLHttpRequest` wrapping | `Dash0HttpClient` for `package:http` |
 | `window.onerror`, unhandled rejections | `FlutterError.onError`, `PlatformDispatcher.onError`, `Dash0.runGuarded` |
 | `localStorage` session | `shared_preferences` session |
@@ -396,7 +418,7 @@ telemetry.
 | Last chance unload flush | Flush on `paused`, `hidden` and `detached` lifecycle states |
 | Web vitals | Frame based equivalents, see "Web vitals equivalents" |
 | rrweb session recording | Event-based replay with optional masked screenshots |
-| Rage clicks | `app.rage_click` events |
+| Rage clicks | `browser.rage_click` events |
 | Profiling | Long task / ANR detection, runtime gauges and `Dash0.profile` |
 | Transport compression | gzip (not on web) |
 

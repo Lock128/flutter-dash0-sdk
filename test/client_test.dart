@@ -57,7 +57,7 @@ void main() {
 
     final log = transport.logs.single;
     expect(attr(log, 'event.name'), 'checkout');
-    expect(attr(log, 'dash0.app.event.title'), 'Checkout done');
+    expect(attr(log, 'dash0.web.event.title'), 'Checkout done');
     expect(attr(log, 'session.id'), client.sessionId);
     expect(attr(log, 'tenant'), 'acme');
     expect(attr(log, 'cart.size'), '3');

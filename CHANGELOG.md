@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- **Breaking:** the default names now match dash0-sdk-web so that Dash0 Web Events can recognize the data: scope and `telemetry.sdk.name` `dash0-web-sdk`, events `browser.page_view`, `browser.error`, `browser.rage_click`, and attributes `dash0.web.event.title`, `dash0.web.event.id`, `dash0.web.request.cancelled`. Set `Dash0Options.legacyAppNames` to keep the 0.2.0 names.
+- Add `page.url.full`, `page.url.scheme`, `page.url.domain` and `page.url.path` (`app://<screen>`) to all signals once a screen is known.
+- Add `browser.web_vital` events for `LCP` (time to first frame) and `INP` (p98 interaction latency), sent with `app.vitals`.
+- `browser.*` event names are reserved for custom events. Flutter specific `app.*` events and metrics are unchanged.
+
 ## 0.2.0
 
 - Export metrics when the app goes to the background and when a session is terminated, end HTTP spans of cancelled response streams and of requests that are never closed, do not report start up vitals for time spent while disabled, count rage clicks on taps instead of every pointer down, and document the screenshot masking and profiling limits.

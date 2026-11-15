@@ -67,7 +67,7 @@ void main() {
     expect(attr(transport.logs.single, 'exception.message'), 'later');
   });
 
-  test('reportError sends an app.error event with exception attributes',
+  test('reportError sends a browser.error event with exception attributes',
       () async {
     final (client, transport) = await start();
     client.reportError(
@@ -76,7 +76,7 @@ void main() {
     );
     await client.flush();
     final log = transport.logs.single;
-    expect(attr(log, 'event.name'), 'app.error');
+    expect(attr(log, 'event.name'), 'browser.error');
     expect(attr(log, 'exception.type'), 'StateError');
     expect(attr(log, 'exception.message'), contains('bad state'));
     expect(attr(log, 'exception.stacktrace'), contains('main'));

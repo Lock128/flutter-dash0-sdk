@@ -55,13 +55,13 @@ void main() {
 
     final logs = transport.logs;
     expect(logs.map((l) => attr(l, 'app.screen.name')), ['/', '/details', '/']);
-    expect(attr(logs[0], 'event.name'), 'app.page_view');
+    expect(attr(logs[0], 'event.name'), 'browser.page_view');
     expect(attr(logs[0], 'type'), '0');
     expect(attr(logs[1], 'type'), '1');
     expect(attr(logs[1], 'change_state'), 'push');
     expect(attr(logs[1], 'app.screen.referrer'), '/');
     expect(attr(logs[2], 'change_state'), 'pop');
-    expect(attr(logs[1], 'dash0.app.event.title'), '/details');
+    expect(attr(logs[1], 'dash0.web.event.title'), '/details');
   });
 
   testWidgets('custom metadata overrides the title', (tester) async {
@@ -74,7 +74,7 @@ void main() {
     await tester.pumpWidget(app(Dash0NavigatorObserver(client)));
     await client.flush();
     final log = transport.logs.first;
-    expect(attr(log, 'dash0.app.event.title'), 'Screen /');
+    expect(attr(log, 'dash0.web.event.title'), 'Screen /');
     expect(attr(log, 'section'), 'main');
   });
 

@@ -19,15 +19,16 @@ import 'otlp.dart';
 import 'rate_limiter.dart';
 import 'replay/recorder.dart';
 import 'semantic_conventions.dart' as sc;
-import 'semantic_conventions.dart' show Dash0Severity;
+import 'semantic_conventions.dart' show Dash0Names, Dash0Severity;
 import 'session.dart';
 import 'span.dart';
 import 'transport.dart';
+import 'url_attributes.dart';
 
 /// Version reported as `telemetry.sdk.version`.
-const dash0SdkVersion = '0.2.0';
+const dash0SdkVersion = '0.3.0';
 
-/// Scope name reported for all telemetry.
+/// Legacy scope name, reported with `Dash0Options.legacyAppNames`.
 const dash0ScopeName = 'dash0-flutter-sdk';
 
 /// The Dash0 SDK instance. Most apps use the static `Dash0` facade instead of
@@ -147,6 +148,10 @@ class Dash0Client with WidgetsBindingObserver {
   }
 
   final Dash0Options options;
+
+  /// Names shared with dash0-sdk-web, or the legacy `app.*` names.
+  Dash0Names get names =>
+      options.legacyAppNames ? Dash0Names.legacy : Dash0Names.web;
   final IgnoreRules ignoreRules;
 
   /// Random id of this app launch, the equivalent of the browser tab id.
@@ -222,7 +227,7 @@ class Dash0Client with WidgetsBindingObserver {
       sc.deploymentEnvironmentName: o.environment,
       sc.deploymentName: o.deploymentName,
       sc.deploymentId: o.deploymentId,
-      sc.telemetrySdkName: dash0ScopeName,
+      sc.telemetrySdkName: names.sdkName,
       sc.telemetrySdkLanguage: 'dart',
       sc.telemetrySdkVersion: dash0SdkVersion,
       sc.osType: kIsWeb ? 'web' : defaultTargetPlatform.name,
@@ -275,7 +280,33 @@ class Dash0Client with WidgetsBindingObserver {
         sc.sessionId: _sessionId,
         sc.appInstanceId: appInstanceId,
         if (currentScreen != null) sc.appScreenName: currentScreen,
+        ...pageUrlAttributes(),
       };
+
+  /// `page.url.*` attributes for the current screen, as `app://<screen>`.
+  Attributes pageUrlAttributes() {
+    final screen = currentScreen;
+    if (screen == null) return const {};
+    try {
+      final name = screen.replaceFirst(RegExp(r'^/+'), '');
+      final full = scrubUrl('$_pageScheme://$name', options.urlScrubber);
+      final rest = full.startsWith('$_pageScheme://')
+          ? full.substring(_pageScheme.length + 3)
+          : name;
+      return {
+        sc.pageUrlFull: full,
+        sc.pageUrlScheme: _pageScheme,
+        sc.pageUrlDomain: options.effectiveServiceName,
+        sc.pageUrlPath: '/${rest.replaceFirst(RegExp(r'^/+'), '')}',
+      };
+    } catch (e) {
+      dash0Debug('Building page.url attributes failed', e);
+      return const {};
+    }
+  }
+
+  /// Scheme of the `page.url.*` attributes.
+  static const _pageScheme = 'app';
 
   // ---------------------------------------------------------------------
   // Events and logs
@@ -319,7 +350,7 @@ class Dash0Client with WidgetsBindingObserver {
     final attrs = <String, Object?>{
       ...commonAttributes(),
       sc.eventName: name,
-      if (title != null) sc.eventTitle: title,
+      if (title != null) names.eventTitle: title,
       ...attributes ?? const {},
     };
     sendLog(<String, Object?>{
@@ -334,7 +365,7 @@ class Dash0Client with WidgetsBindingObserver {
     }, rateLimited: rateLimited);
   }
 
-  /// Reports an error as an `app.error` event.
+  /// Reports an error as a `browser.error` event (`app.error` with legacy names).
   void reportError(
     Object error, {
     StackTrace? stackTrace,
@@ -372,7 +403,7 @@ class Dash0Client with WidgetsBindingObserver {
       kind: kind,
       attributes: {
         ...commonAttributes(),
-        sc.eventId: spanId,
+        names.eventId: spanId,
         ...attributes ?? const {},
       },
       startTimeUnixNano: startTime != null ? toNanos(startTime) : null,
@@ -575,10 +606,10 @@ class Dash0Client with WidgetsBindingObserver {
     });
   }
 
-  static const Map<String, Object?> _scope = {
-    'name': dash0ScopeName,
-    'version': dash0SdkVersion,
-  };
+  Map<String, Object?> get _scope => {
+        'name': names.sdkName,
+        'version': dash0SdkVersion,
+      };
 
   /// Sends everything that is queued now. The returned future completes when
   /// the requests finished.

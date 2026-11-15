@@ -83,7 +83,7 @@ void main() {
   List<Map<String, Object?>> events(FakeTransport t, String name) =>
       t.logs.where((l) => attr(l, 'event.name') == name).toList();
 
-  testWidgets('three quick taps produce exactly one app.rage_click',
+  testWidgets('three quick taps produce exactly one browser.rage_click',
       (tester) async {
     final (client, transport) = await start();
     await tester.pumpWidget(app());
@@ -93,7 +93,7 @@ void main() {
     }
     await tester.tap(find.byKey(const Key('btn')));
     await client.flush();
-    final rage = events(transport, 'app.rage_click');
+    final rage = events(transport, 'browser.rage_click');
     expect(rage, hasLength(1));
     expect(attr(rage.single, 'app.click.count'), '3');
     expect(attr(rage.single, 'app.click.target'), isA<String>());
@@ -109,7 +109,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
     await client.flush();
-    expect(events(transport, 'app.rage_click'), isEmpty);
+    expect(events(transport, 'browser.rage_click'), isEmpty);
     await client.shutdown();
   });
 
@@ -127,7 +127,7 @@ void main() {
         await tester.tap(find.byKey(const Key('btn')));
       }
       await client.flush();
-      expect(events(transport, 'app.rage_click'), isEmpty);
+      expect(events(transport, 'browser.rage_click'), isEmpty);
       await client.shutdown();
     }
   });

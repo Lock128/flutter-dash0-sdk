@@ -197,6 +197,12 @@ class VitalsInstrumentation {
               sc.vitalsInteractionP98Ms: _round(percentile(_interactions, 98)),
           },
         );
+        // Web vitals compatible events. Flutter approximations: LCP is the
+        // time to first frame of the screen, INP the p98 interaction latency.
+        if (ttff != null) _emitWebVital('LCP', _round(ttff));
+        if (_interactions.isNotEmpty) {
+          _emitWebVital('INP', _round(percentile(_interactions, 98)));
+        }
       }
     } catch (e) {
       dash0Debug('Vitals flush failed', e);
@@ -207,6 +213,14 @@ class VitalsInstrumentation {
     _ttffMs = null;
     _interactions.clear();
     _screenStartedAt = _clock();
+  }
+
+  void _emitWebVital(String name, double value) {
+    client.emitEvent(
+      sc.EventNames.webVital,
+      severity: sc.Dash0Severity.info,
+      data: {'name': name, 'value': value, 'delta': value},
+    );
   }
 
   static double _round(double v) => (v * 100).round() / 100;
