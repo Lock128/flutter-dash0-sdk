@@ -137,7 +137,7 @@ class ErrorInstrumentation {
     _reported++;
 
     _client.emitEvent(
-      sc.EventNames.error,
+      _client.names.error,
       severity: Dash0Severity.error,
       data: message,
       attributes: {

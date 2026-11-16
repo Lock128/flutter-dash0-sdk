@@ -312,6 +312,7 @@ class Dash0Options {
     this.ignoreErrorMessages = const [],
     this.headersToCapture = const [],
     this.urlScrubber,
+    this.legacyAppNames = false,
     this.screenNameResolver,
     this.generatePageViewMetadata,
     this.batchSize = 15,
@@ -387,6 +388,13 @@ class Dash0Options {
   /// Applied to every URL before it is added to a signal. Credentials in URLs
   /// are always redacted before this is invoked.
   final UrlScrubber? urlScrubber;
+
+  /// Uses the `app.*` names of SDK versions before 0.3.0 (`app.page_view`,
+  /// `app.error`, `app.rage_click`, `dash0.app.event.*`, scope
+  /// `dash0-flutter-sdk`) instead of the names of dash0-sdk-web
+  /// (`browser.page_view`, `browser.error`, `browser.rage_click`,
+  /// `dash0.web.event.*`, scope `dash0-web-sdk`).
+  final bool legacyAppNames;
 
   /// Maps a route to a screen name. Falls back to `route.settings.name`.
   final String? Function(Route<dynamic> route)? screenNameResolver;

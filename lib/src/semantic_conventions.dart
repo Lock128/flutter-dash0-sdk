@@ -1,7 +1,8 @@
 /// Attribute keys, event names and enumerations used by the SDK.
 ///
-/// Mirrors `semantic-conventions.ts` of dash0-sdk-web. Event names use the
-/// `app.` prefix instead of `browser.`.
+/// Mirrors `semantic-conventions.ts` of dash0-sdk-web. Flutter specific
+/// signals use the `app.` prefix. The names shared with the web SDK are
+/// resolved at runtime through [Dash0Names].
 library;
 
 // Resource attributes
@@ -21,7 +22,10 @@ const osName = 'os.name';
 const eventName = 'event.name';
 const eventTitle = 'dash0.app.event.title';
 const eventId = 'dash0.app.event.id';
-const requestCancelled = 'dash0.app.request.cancelled';
+const _legacyEventTitle = eventTitle;
+const _legacyEventId = eventId;
+const webEventTitle = 'dash0.web.event.title';
+const webEventId = 'dash0.web.event.id';
 const sessionId = 'session.id';
 const appInstanceId = 'app.instance.id';
 const appScreenName = 'app.screen.name';
@@ -42,6 +46,12 @@ const exceptionMessage = 'exception.message';
 const exceptionType = 'exception.type';
 const exceptionStacktrace = 'exception.stacktrace';
 const errorType = 'error.type';
+
+// Page URL attributes (dash0-sdk-web attributes/url.ts with a `page` prefix)
+const pageUrlFull = 'page.url.full';
+const pageUrlScheme = 'page.url.scheme';
+const pageUrlDomain = 'page.url.domain';
+const pageUrlPath = 'page.url.path';
 
 // URL attributes
 const urlDomain = 'url.domain';
@@ -105,12 +115,20 @@ const clickTarget = 'app.click.target';
 class EventNames {
   EventNames._();
 
+  // Legacy names, used with `Dash0Options.legacyAppNames`.
   static const pageView = 'app.page_view';
   static const error = 'app.error';
+  static const rageClick = 'app.rage_click';
+
+  // Names used by dash0-sdk-web, the default.
+  static const webPageView = 'browser.page_view';
+  static const webError = 'browser.error';
+  static const webRageClick = 'browser.rage_click';
+  static const webVital = 'browser.web_vital';
+
   static const lifecycle = 'app.lifecycle';
 
   static const vitals = 'app.vitals';
-  static const rageClick = 'app.rage_click';
   static const deadTap = 'app.dead_tap';
   static const sessionReplay = 'app.session_replay';
   static const longTask = 'app.long_task';
@@ -118,6 +136,10 @@ class EventNames {
   static const all = <String>{
     pageView,
     error,
+    webPageView,
+    webError,
+    webRageClick,
+    webVital,
     lifecycle,
     vitals,
     rageClick,
@@ -125,6 +147,47 @@ class EventNames {
     sessionReplay,
     longTask,
   };
+}
+
+/// Names that differ between the web compatible and the legacy `app.*`
+/// naming. See `Dash0Options.legacyAppNames`.
+class Dash0Names {
+  const Dash0Names._({
+    required this.sdkName,
+    required this.pageView,
+    required this.error,
+    required this.rageClick,
+    required this.eventTitle,
+    required this.eventId,
+  });
+
+  /// Scope name and `telemetry.sdk.name`.
+  final String sdkName;
+  final String pageView;
+  final String error;
+  final String rageClick;
+  final String eventTitle;
+  final String eventId;
+
+  /// Names of dash0-sdk-web (default).
+  static const web = Dash0Names._(
+    sdkName: 'dash0-web-sdk',
+    pageView: EventNames.webPageView,
+    error: EventNames.webError,
+    rageClick: EventNames.webRageClick,
+    eventTitle: webEventTitle,
+    eventId: webEventId,
+  );
+
+  /// Names of SDK versions before 0.3.0.
+  static const legacy = Dash0Names._(
+    sdkName: 'dash0-flutter-sdk',
+    pageView: EventNames.pageView,
+    error: EventNames.error,
+    rageClick: EventNames.rageClick,
+    eventTitle: _legacyEventTitle,
+    eventId: _legacyEventId,
+  );
 }
 
 const spanEventNameException = 'exception';

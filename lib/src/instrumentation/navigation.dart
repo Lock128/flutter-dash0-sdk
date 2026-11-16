@@ -77,7 +77,7 @@ void trackScreenView(
 
   final meta = _safeMeta(client, screenName);
   client.emitEvent(
-    sc.EventNames.pageView,
+    client.names.pageView,
     title: meta?.title ?? screenName,
     attributes: {
       sc.pageViewType:

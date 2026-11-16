@@ -126,7 +126,7 @@ class RageClickInstrumentation {
     final result = detector.onTap(position, time);
     if (result != null) {
       client.emitEvent(
-        sc.EventNames.rageClick,
+        client.names.rageClick,
         attributes: {
           sc.clickX: position.dx.round(),
           sc.clickY: position.dy.round(),
