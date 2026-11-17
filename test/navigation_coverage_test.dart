@@ -17,6 +17,14 @@ class StatisticsScreen extends StatelessWidget {
       const Scaffold(body: Text('statistics'));
 }
 
+/// A two character name, like the ones minified by release web builds.
+class Ab extends StatelessWidget {
+  const Ab({super.key});
+
+  @override
+  Widget build(BuildContext context) => const Scaffold(body: Text('ab'));
+}
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -104,6 +112,22 @@ void main() {
     await tester.pumpAndSettle();
     await client.flush();
     expect(screens(transport), ['/', '/StatisticsScreen', '/']);
+  });
+
+  testWidgets('routes with a minified page widget name are not reported',
+      (tester) async {
+    final (client, transport) = await start();
+    await tester.pumpWidget(app(Dash0NavigatorObserver(client)));
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.push(MaterialPageRoute<void>(builder: (_) => const Ab()));
+    await tester.pumpAndSettle();
+    navigator.push(MaterialPageRoute<void>(
+      settings: const RouteSettings(name: '/named'),
+      builder: (_) => const Ab(),
+    ));
+    await tester.pumpAndSettle();
+    await client.flush();
+    expect(screens(transport), ['/', '/named']);
   });
 
   testWidgets('nameUnnamedRoutes false ignores unnamed routes', (tester) async {

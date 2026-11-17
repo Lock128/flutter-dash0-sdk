@@ -196,12 +196,11 @@ const _frameworkWrappers = {
   'Dialog',
 };
 
-/// Name used instead of the type of a page widget whose name is minified.
-const minifiedPageName = 'unnamed';
-
 /// Whether [type] looks like a name minified by a release web build
 /// (`minified:Ab`, or one or two characters), which is not stable across
-/// builds. Use named routes or `screenNameResolver` in such apps.
+/// builds. Routes showing such a widget are not reported, because their
+/// names would be unstable and indistinguishable. Use named routes or
+/// `screenNameResolver` in such apps.
 bool isMinifiedTypeName(String type) {
   final name = type.split('<').first;
   return name.startsWith('minified:') ||
@@ -209,7 +208,8 @@ bool isMinifiedTypeName(String type) {
 }
 
 /// Name of the type of the first widget below [context] that is not a
-/// framework wrapper or private, usually the page widget of a route.
+/// framework wrapper or private, usually the page widget of a route. Returns
+/// null if that widget has a minified type name.
 String? pageWidgetTypeName(BuildContext context) {
   String? found;
   var visited = 0;
@@ -219,8 +219,7 @@ String? pageWidgetTypeName(BuildContext context) {
     if (widget is StatelessWidget || widget is StatefulWidget) {
       final type = widget.runtimeType.toString();
       if (!type.startsWith('_') && !_frameworkWrappers.contains(type)) {
-        found =
-            isMinifiedTypeName(type) ? minifiedPageName : type.split('<').first;
+        found = isMinifiedTypeName(type) ? null : type.split('<').first;
         return true;
       }
     }

@@ -8,7 +8,7 @@
 - Strip query strings and fragments from route names.
 - Add `Dash0.createNavigatorObserver()` for nested navigators, `ShellRoute` and `StatefulShellRoute`, and document go_router usage.
 - Add `app.screen.previous.duration_ms` to page views, the time the previous screen was visible. Time while the app was in the background is not counted.
-- Routes named after a minified widget type (release web builds) are reported as `/unnamed`. Use named routes or `screenNameResolver` in release web apps.
+- Routes named after a minified widget type (release web builds) are not reported, because their names are unstable and indistinguishable. Use named routes or `screenNameResolver` in release web apps.
 - Add `Dash0.startHttpRequest` and `Dash0HttpSpan` to create HTTP client spans for HTTP stacks the SDK cannot instrument, such as Amplify.
 
 ## 0.3.0
