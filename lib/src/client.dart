@@ -27,7 +27,7 @@ import 'transport.dart';
 import 'url_attributes.dart';
 
 /// Version reported as `telemetry.sdk.version`.
-const dash0SdkVersion = '0.4.0';
+const dash0SdkVersion = '0.5.0';
 
 /// Legacy scope name, reported with `Dash0Options.legacyAppNames`.
 const dash0ScopeName = 'dash0-flutter-sdk';

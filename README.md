@@ -130,6 +130,24 @@ final router = GoRouter(
 
 The same applies to tab bars with their own `Navigator`s and to `Navigator` widgets nested in a screen.
 
+### Tabs and other in screen views
+
+A `TabBar` inside one route is one page view for the navigator observer. Wrap it with `Dash0TabObserver` to report each tab as its own page view, named `<parent>/<tab>`:
+
+```dart
+Dash0TabObserver(
+  parent: '/admin',                       // the route's name
+  tabs: const ['Overview', 'Failed Payments', 'Feature Flags'],
+  controller: _tabController,             // or omit to use DefaultTabController
+  child: Column(children: [TabBar(...), Expanded(child: TabBarView(...))]),
+)
+// /admin (Overview), /admin/failed-payments, /admin/feature-flags
+```
+
+Names are lower-cased and non alphanumerics become `-`. Use fixed names, never ids or user data. The first tab is reported as the parent route (`/admin`) because the observer already sent that page view when the route was pushed. Set `firstTabIsParent: false` to report `/admin/overview` as well. Changes are reported once they settle, so a tap is reported when the animation ends. Nothing is sent while the SDK is not initialized or disabled, and errors are never thrown into the UI.
+
+For a `PageView` or a custom switcher call `trackSubScreen('/onboarding', 'platform-features')`.
+
 ### HTTP
 
 ```dart
