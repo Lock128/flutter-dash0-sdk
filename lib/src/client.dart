@@ -9,6 +9,7 @@ import 'ids.dart';
 import 'ignore_rules.dart';
 import 'instrumentation/errors.dart';
 import 'instrumentation/http_overrides.dart';
+import 'instrumentation/navigation.dart';
 import 'instrumentation/profiling.dart';
 import 'instrumentation/rage_clicks.dart';
 import 'instrumentation/vitals.dart';
@@ -26,7 +27,7 @@ import 'transport.dart';
 import 'url_attributes.dart';
 
 /// Version reported as `telemetry.sdk.version`.
-const dash0SdkVersion = '0.3.0';
+const dash0SdkVersion = '0.4.0';
 
 /// Legacy scope name, reported with `Dash0Options.legacyAppNames`.
 const dash0ScopeName = 'dash0-flutter-sdk';
@@ -39,8 +40,10 @@ class Dash0Client with WidgetsBindingObserver {
     this._transport,
     this._session,
     this.ignoreRules,
-    String sessionId,
-  )   : _sessionId = sessionId,
+    String sessionId, {
+    int Function()? nowMillis,
+  })  : _sessionId = sessionId,
+        _clock = nowMillis ?? (() => DateTime.now().millisecondsSinceEpoch),
         _sampled = isSessionSampledIn(sessionId, options.sessionSamplingRate),
         appInstanceId = generateUniqueId(appInstanceIdBytes) {
     _logBatcher = Batcher<Map<String, Object?>>(
@@ -113,6 +116,7 @@ class Dash0Client with WidgetsBindingObserver {
         endpoints: options.allEndpoints,
       ),
       sessionId,
+      nowMillis: nowMillis,
     );
     if (observeLifecycle && options.isEnabled(Dash0Instrumentation.lifecycle)) {
       WidgetsBinding.instance.addObserver(client);
@@ -188,6 +192,19 @@ class Dash0Client with WidgetsBindingObserver {
   /// instrumentation and added to all signals.
   String? currentScreen;
 
+  final int Function() _clock;
+
+  /// Wall clock time in milliseconds at which [currentScreen] was shown.
+  /// Used for `app.screen.previous.duration_ms`.
+  int? screenShownAtMillis;
+
+  /// Current time of the client's clock in milliseconds since the epoch.
+  int nowMillisSinceEpoch() => _clock();
+
+  /// The latest page view requested while the client was disabled. It is sent
+  /// when the client is enabled. See [trackScreenView].
+  PendingScreenView? pendingScreenView;
+
   /// The vitals instrumentation, null when disabled. Public for
   /// instrumentations.
   VitalsInstrumentation? vitals;
@@ -207,8 +224,29 @@ class Dash0Client with WidgetsBindingObserver {
   /// Enables or disables recording at runtime, for example from a feature
   /// flag. Disabled clients drop signals instead of queueing them.
   set enabled(bool value) {
+    final wasEnabled = _enabled;
     _enabled = value;
-    if (!value) unawaited(flush());
+    if (!value) {
+      unawaited(flush());
+    } else if (!wasEnabled) {
+      _sendPendingScreenView();
+    }
+  }
+
+  void _sendPendingScreenView() {
+    final pending = pendingScreenView;
+    if (pending == null || _shutdown) return;
+    pendingScreenView = null;
+    try {
+      trackScreenView(
+        this,
+        pending.screenName,
+        changeState: pending.changeState,
+        attributes: pending.attributes,
+      );
+    } catch (_) {
+      // Telemetry must never throw into the app.
+    }
   }
 
   /// The resource sent with all telemetry.

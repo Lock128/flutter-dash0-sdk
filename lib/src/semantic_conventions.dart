@@ -210,6 +210,9 @@ enum Dash0Severity {
 const pageViewType = 'type';
 const pageViewChangeState = 'change_state';
 const pageViewReferrer = 'app.screen.referrer';
+
+/// Milliseconds the previous screen was visible.
+const pageViewPreviousDuration = 'app.screen.previous.duration_ms';
 const pageViewTypeInitial = 0;
 const pageViewTypeVirtual = 1;
 

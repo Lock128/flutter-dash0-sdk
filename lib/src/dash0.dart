@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'client.dart';
 import 'instrumentation/http_client.dart';
+import 'instrumentation/http_common.dart';
 import 'metrics/instruments.dart';
 import 'instrumentation/navigation.dart';
 import 'options.dart';
@@ -57,6 +58,11 @@ class Dash0 {
   /// nothing until the SDK is initialized.
   static NavigatorObserver get navigatorObserver => _observer;
 
+  /// Creates a new observer. A `NavigatorObserver` can only be attached to
+  /// one `Navigator`, so use one per nested navigator or `ShellRoute`.
+  static Dash0NavigatorObserver createNavigatorObserver() =>
+      Dash0NavigatorObserver();
+
   /// Returns a `package:http` client that creates spans. Without an
   /// initialized SDK the plain [inner] client (or a new one) is returned.
   static http.Client httpClient([http.Client? inner]) {
@@ -64,6 +70,13 @@ class Dash0 {
     if (c == null) return inner ?? http.Client();
     return Dash0HttpClient(c, inner);
   }
+
+  /// Starts a client span for a request made with an HTTP stack that is not
+  /// instrumented, for example the AWS Amplify plugins. Returns null before
+  /// [init], while disabled, when HTTP instrumentation is off or the URL is
+  /// ignored. Call `Dash0HttpSpan.finish` when the request ends.
+  static Dash0HttpSpan? startHttpRequest(String method, String url) =>
+      Dash0HttpSpan.start(_client, method, url);
 
   /// Instruments all `dart:io` HTTP clients (including `package:http`'s
   /// `IOClient`, Dio and most plugins). Does nothing on web or before [init].

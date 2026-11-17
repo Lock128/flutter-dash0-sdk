@@ -138,3 +138,68 @@ class HttpCall {
         (m) => scrubUrl(m[0]!, client.options.urlScrubber));
   }
 }
+
+/// A client span for a request made with an HTTP stack that the SDK cannot
+/// instrument itself, for example the client of the AWS Amplify plugins.
+///
+/// Create it with `Dash0.startHttpRequest`, add [propagationHeaders] to the
+/// request, report the response with [setResponse] and always call [finish],
+/// also when the request failed. Mirrors the fetch instrumentation of
+/// dash0-sdk-web. None of the methods throw.
+class Dash0HttpSpan {
+  Dash0HttpSpan._(this._call, this._url);
+
+  final HttpCall _call;
+  final String _url;
+
+  /// Starts a span, or returns null if the SDK is disabled, HTTP
+  /// instrumentation is off or [url] is ignored.
+  static Dash0HttpSpan? start(Dash0Client? client, String method, String url) {
+    try {
+      if (client == null || !HttpCall.shouldInstrument(client, url)) {
+        return null;
+      }
+      return Dash0HttpSpan._(HttpCall.start(client, method, url), url);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The span, for custom attributes.
+  Dash0Span get span => _call.span;
+
+  /// Trace context headers to add to the request. Empty if no propagator
+  /// matches the URL.
+  Map<String, String> propagationHeaders() {
+    try {
+      return _call.propagationHeaders(_url);
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// Captures headers matching `Dash0Options.headersToCapture`.
+  void captureHeaders(Map<String, String> headers, {required bool request}) {
+    try {
+      _call.captureHeaders(headers, request: request);
+    } catch (_) {
+      // Telemetry must never throw into the app.
+    }
+  }
+
+  /// Records the response. Status codes of 400 and above set the span status
+  /// to error.
+  void setResponse(int statusCode, {int? contentLength, String? reason}) {
+    try {
+      _call.setResponse(statusCode,
+          contentLength: contentLength, reason: reason);
+    } catch (_) {
+      // Telemetry must never throw into the app.
+    }
+  }
+
+  /// Ends the span. Only the first call has an effect. Pass [error] if the
+  /// request failed without a response.
+  void finish({Object? error, StackTrace? stackTrace}) =>
+      _call.finish(error: error, stackTrace: stackTrace);
+}

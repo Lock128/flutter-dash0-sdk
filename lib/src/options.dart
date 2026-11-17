@@ -314,6 +314,8 @@ class Dash0Options {
     this.urlScrubber,
     this.legacyAppNames = false,
     this.screenNameResolver,
+    this.nameUnnamedRoutes = true,
+    this.trackPopupRoutes = false,
     this.generatePageViewMetadata,
     this.batchSize = 15,
     this.batchDelay = const Duration(seconds: 1),
@@ -398,6 +400,16 @@ class Dash0Options {
 
   /// Maps a route to a screen name. Falls back to `route.settings.name`.
   final String? Function(Route<dynamic> route)? screenNameResolver;
+
+  /// Names routes without `RouteSettings.name` after the page widget they
+  /// show (`/StatisticsScreen`), so that `Navigator.push(MaterialPageRoute(
+  /// builder: ...))` is reported. [screenNameResolver] and route names take
+  /// precedence.
+  final bool nameUnnamedRoutes;
+
+  /// Reports dialogs, bottom sheets and menus (`PopupRoute`s) as screens.
+  /// Unnamed ones are named `/popup/<WidgetType>` (needs [nameUnnamedRoutes]).
+  final bool trackPopupRoutes;
 
   /// Allows custom metadata for a page view. Return null for the default.
   final Dash0PageViewMeta? Function(String screenName)?

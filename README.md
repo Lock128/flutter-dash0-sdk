@@ -81,10 +81,54 @@ MaterialApp(
 GoRouter(observers: [Dash0.navigatorObserver], routes: [...]);
 ```
 
-Routes need a name (`RouteSettings.name`; go_router sets it from the route `name`). Use `screenNameResolver` for other
-schemes, `generatePageViewMetadata` to change the title or add attributes, and `Dash0.trackScreen(name)` for manual page
-views. Dialogs and bottom sheets are not reported. The current screen is added to all later signals as
-`app.screen.name`.
+A route is named by, in this order: `screenNameResolver`, `RouteSettings.name` (go_router sets it from the route
+`name`) and, for unnamed `MaterialPageRoute`/`PageRoute`s, the type of the page widget it shows (`/StatisticsScreen`,
+`Dash0Options.nameUnnamedRoutes`, default `true`). The widget name is derived after the route was built, so it is
+reported one frame after the push. Query strings and fragments are removed from route names. Use
+`generatePageViewMetadata` to change the title or add attributes, and `Dash0.trackScreen(name)` for manual page views.
+
+Dialogs, bottom sheets and menus (`PopupRoute`s) are not reported unless `Dash0Options.trackPopupRoutes` is `true`.
+Then named popups use their name and unnamed ones are reported as `/popup/<WidgetType>`. Popping returns to the
+previous screen, which is reported again because the popup was the current screen. With `trackPopupRoutes` off the
+previous screen is the same, so nothing is sent.
+
+If the client is disabled (`Dash0Options(enabled: false)`, for example until a feature flag loads), page views are not
+sent and the screen is not marked as seen. When `Dash0.enabled = true` is set, the latest screen is sent once as the
+initial page view (`type` 0), so the first screen is not lost.
+
+Every page view after the first has `app.screen.previous.duration_ms`, the time the previous screen was visible.
+dash0-sdk-web sends all events (page views, `app.lifecycle`, `app.vitals`, `browser.web_vital`) as log records without
+an end time, so they have no duration of their own. Dash0 derives a page view's duration from the following page view
+(inferred, not verified), so a page view that is never followed by another has none.
+
+#### Nested navigators and go_router
+
+A `NavigatorObserver` can only be attached to one `Navigator`, and `Dash0.navigatorObserver` is a single shared
+instance. Create one observer per navigator with `Dash0.createNavigatorObserver()`:
+
+```dart
+final router = GoRouter(
+  observers: [Dash0.navigatorObserver],          // root navigator
+  routes: [
+    ShellRoute(
+      observers: [Dash0.createNavigatorObserver()],   // the shell's navigator
+      builder: (context, state, child) => Shell(child: child),
+      routes: [GoRoute(path: '/home', name: 'home', builder: ...)],
+    ),
+    StatefulShellRoute.indexedStack(
+      builder: ...,
+      branches: [
+        StatefulShellBranch(
+          observers: [Dash0.createNavigatorObserver()],  // one per branch
+          routes: [...],
+        ),
+      ],
+    ),
+  ],
+);
+```
+
+The same applies to tab bars with their own `Navigator`s and to `Navigator` widgets nested in a screen.
 
 ### HTTP
 
@@ -181,6 +225,28 @@ Every request recorded by `Dash0HttpClient` or `Dash0HttpOverrides` also records
 `http.client.request.duration` (seconds) with `http.request.method`, `server.address`, `server.port`,
 `http.response.status_code` and `error.type`. Switch it off by leaving `Dash0Instrumentation.metrics` out of
 `enabledInstrumentations`.
+
+#### HTTP stacks that are not instrumented
+
+Clients that do not use `dart:io` through `HttpOverrides` or `package:http` (for example the AWS Amplify plugins, which
+bring their own client) can create spans with `Dash0.startHttpRequest`. It returns `null` before init, while disabled,
+when HTTP instrumentation is off or the URL matches `ignoreUrls`.
+
+```dart
+final span = Dash0.startHttpRequest('GET', url);
+try {
+  final response = await send(headers: {...?span?.propagationHeaders()});
+  span?.captureHeaders(response.headers, request: false);
+  span?.setResponse(response.statusCode, contentLength: response.contentLength);
+} catch (e, st) {
+  span?.finish(error: e, stackTrace: st);
+  rethrow;
+}
+span?.finish();
+```
+
+The span matches the fetch instrumentation of dash0-sdk-web: name `HTTP <METHOD>`, kind client, `http.request.method`,
+`url.*`, `http.response.status_code`, `error.type`, and error status for status codes of 400 and above and failures.
 
 ### Metrics
 
@@ -383,6 +449,8 @@ await Dash0.shutdown(); // flush, restore error handlers, allow init again
 | `headersToCapture` | `[]` | Request and response headers whose names match are captured as span attributes. |
 | `urlScrubber` | none | Function applied to every URL attribute. Credentials in URLs are always redacted first. |
 | `screenNameResolver` | route name | Custom mapping from `Route` to screen name. |
+| `nameUnnamedRoutes` | `true` | Name routes without `RouteSettings.name` after their page widget (`/StatisticsScreen`). |
+| `trackPopupRoutes` | `false` | Report dialogs and bottom sheets as screens (`/popup/<WidgetType>` when unnamed). |
 | `generatePageViewMetadata` | none | Custom title and attributes per page view. |
 | `batchSize`, `batchDelay` | `15`, 1 second | Batching of signals. |
 | `metricExportInterval` | 30 seconds | How often metrics are exported, at least 1 second. |
