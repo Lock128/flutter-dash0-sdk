@@ -84,7 +84,7 @@ GoRouter(observers: [Dash0.navigatorObserver], routes: [...]);
 A route is named by, in this order: `screenNameResolver`, `RouteSettings.name` (go_router sets it from the route
 `name`) and, for unnamed `MaterialPageRoute`/`PageRoute`s, the type of the page widget it shows (`/StatisticsScreen`,
 `Dash0Options.nameUnnamedRoutes`, default `true`). The widget name is derived after the route was built, so it is
-reported one frame after the push. Query strings and fragments are removed from route names. Use
+reported one frame after the push. In release web builds widget type names are minified, such as `minified:Ab`. These are reported as `/unnamed`, so release web apps should use named routes (`RouteSettings.name`) or `screenNameResolver`. Query strings and fragments are removed from route names. Use
 `generatePageViewMetadata` to change the title or add attributes, and `Dash0.trackScreen(name)` for manual page views.
 
 Dialogs, bottom sheets and menus (`PopupRoute`s) are not reported unless `Dash0Options.trackPopupRoutes` is `true`.

@@ -198,6 +198,29 @@ class Dash0Client with WidgetsBindingObserver {
   /// Used for `app.screen.previous.duration_ms`.
   int? screenShownAtMillis;
 
+  /// Milliseconds the app spent in the background since [screenShownAtMillis].
+  int screenBackgroundMillis = 0;
+  int? _backgroundSinceMillis;
+
+  /// Marks [currentScreen] as shown now and resets the background time.
+  void markScreenShown(int now) {
+    screenShownAtMillis = now;
+    screenBackgroundMillis = 0;
+    if (_backgroundSinceMillis != null) _backgroundSinceMillis = now;
+  }
+
+  /// Time the current screen was visible in the foreground since it was
+  /// shown, or null if unknown.
+  int? screenVisibleMillis(int now) {
+    final shownAt = screenShownAtMillis;
+    if (shownAt == null || now < shownAt) return null;
+    final since = _backgroundSinceMillis;
+    final background = screenBackgroundMillis +
+        (since == null ? 0 : (now - since).clamp(0, now));
+    final visible = now - shownAt - background;
+    return visible < 0 ? 0 : visible;
+  }
+
   /// Current time of the client's clock in milliseconds since the epoch.
   int nowMillisSinceEpoch() => _clock();
 
@@ -687,6 +710,16 @@ class Dash0Client with WidgetsBindingObserver {
         _sessionId = _session.sessionId;
         _sampled = isSessionSampledIn(_sessionId, options.sessionSamplingRate);
       }
+    }
+    final nowMs = _clock();
+    if (background) {
+      _backgroundSinceMillis ??= nowMs;
+    } else if (state == AppLifecycleState.resumed) {
+      final since = _backgroundSinceMillis;
+      if (since != null && nowMs >= since) {
+        screenBackgroundMillis += nowMs - since;
+      }
+      _backgroundSinceMillis = null;
     }
     if (background) vitals?.flushScreen('background');
     if (background) _longTasks?.pause();

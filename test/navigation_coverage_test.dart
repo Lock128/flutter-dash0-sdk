@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:dash0_flutter_sdk/dash0_flutter_sdk.dart';
 import 'package:dash0_flutter_sdk/src/instrumentation/navigation.dart'
-    show trackScreenView;
+    show isMinifiedTypeName, trackScreenView;
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -226,12 +226,52 @@ void main() {
     expect(attr(transport.logs[2], 'app.screen.previous.duration_ms'), '40');
   });
 
-  testWidgets('createNavigatorObserver returns independent observers',
+  testWidgets('previous screen duration excludes time in the background',
       (tester) async {
-    final a = Dash0.createNavigatorObserver();
+    var now = 1000;
+    final (client, transport) = await start(nowMillis: () => now);
+    trackScreenView(client, '/a');
+    now += 1000;
+    await client.handleLifecycleState(AppLifecycleState.paused);
+    now += 60000;
+    await client.handleLifecycleState(AppLifecycleState.resumed);
+    now += 500;
+    trackScreenView(client, '/b');
+    // Screen change while backgrounded.
+    now += 300;
+    await client.handleLifecycleState(AppLifecycleState.paused);
+    now += 5000;
+    trackScreenView(client, '/c');
+    await client.flush();
+    final views = transport.logs
+        .where((l) => attr(l, 'app.screen.previous.duration_ms') != null)
+        .toList();
+    expect(attr(views[0], 'app.screen.previous.duration_ms'), '1500');
+    expect(attr(views[1], 'app.screen.previous.duration_ms'), '300');
+  });
+
+  test('minified type names are detected', () {
+    expect(isMinifiedTypeName('minified:Ab'), isTrue);
+    expect(isMinifiedTypeName('Ab'), isTrue);
+    expect(isMinifiedTypeName('StatisticsScreen'), isFalse);
+    expect(isMinifiedTypeName('HomeScreen<int>'), isFalse);
+  });
+
+  testWidgets('createNavigatorObserver returns observers that track screens',
+      (tester) async {
+    final (client, transport) = await start();
+    final a = Dash0NavigatorObserver(client);
     final b = Dash0.createNavigatorObserver();
     expect(identical(a, b), isFalse);
-    expect(identical(a, Dash0.navigatorObserver), isFalse);
+    expect(identical(b, Dash0.navigatorObserver), isFalse);
+    await tester.pumpWidget(MaterialApp(
+      navigatorObservers: [a],
+      initialRoute: '/',
+      routes: {'/': (_) => const HomeScreen()},
+    ));
+    await tester.pump();
+    await client.flush();
+    expect(screens(transport), ['/']);
   });
 
   testWidgets('a throwing resolver never reaches the app', (tester) async {

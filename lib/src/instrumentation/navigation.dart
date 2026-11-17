@@ -196,6 +196,18 @@ const _frameworkWrappers = {
   'Dialog',
 };
 
+/// Name used instead of the type of a page widget whose name is minified.
+const minifiedPageName = 'unnamed';
+
+/// Whether [type] looks like a name minified by a release web build
+/// (`minified:Ab`, or one or two characters), which is not stable across
+/// builds. Use named routes or `screenNameResolver` in such apps.
+bool isMinifiedTypeName(String type) {
+  final name = type.split('<').first;
+  return name.startsWith('minified:') ||
+      RegExp(r'^[A-Za-z$]{1,2}[0-9]?$').hasMatch(name);
+}
+
 /// Name of the type of the first widget below [context] that is not a
 /// framework wrapper or private, usually the page widget of a route.
 String? pageWidgetTypeName(BuildContext context) {
@@ -207,7 +219,8 @@ String? pageWidgetTypeName(BuildContext context) {
     if (widget is StatelessWidget || widget is StatefulWidget) {
       final type = widget.runtimeType.toString();
       if (!type.startsWith('_') && !_frameworkWrappers.contains(type)) {
-        found = type.split('<').first;
+        found =
+            isMinifiedTypeName(type) ? minifiedPageName : type.split('<').first;
         return true;
       }
     }
@@ -243,10 +256,10 @@ void trackScreenView(
   final previous = client.currentScreen;
   if (previous == screenName) return;
   final now = client.nowMillisSinceEpoch();
-  final shownAt = client.screenShownAtMillis;
+  final visibleMillis = client.screenVisibleMillis(now);
   client.vitals?.onScreenChange();
   client.currentScreen = screenName;
-  client.screenShownAtMillis = now;
+  client.markScreenShown(now);
   client.replay?.onNavigation(screenName, changeState);
 
   final meta = _safeMeta(client, screenName);
@@ -258,8 +271,8 @@ void trackScreenView(
           previous == null ? sc.pageViewTypeInitial : sc.pageViewTypeVirtual,
       if (changeState != null) sc.pageViewChangeState: changeState,
       if (previous != null) sc.pageViewReferrer: previous,
-      if (previous != null && shownAt != null && now >= shownAt)
-        sc.pageViewPreviousDuration: now - shownAt,
+      if (previous != null && visibleMillis != null)
+        sc.pageViewPreviousDuration: visibleMillis,
       ...meta?.attributes ?? const {},
       ...attributes ?? const {},
     },
