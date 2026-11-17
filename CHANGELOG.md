@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- Add `Dash0TabObserver`, a widget that sends a page view (`/admin/failed-payments`) whenever the selected tab of a tab controller settles (any controller class, passed as `controller`, `index` and `isChanging`). Taps, `animateTo` and swipes are reported, mid animation changes and unchanged indexes are not. The first tab is reported as the parent route by default, because the route's own page view already covers it.
+- Add `trackSubScreen` and `subScreenPath` for in screen views without a `TabController`, such as a `PageView`.
+- Page views from sub screens have `change_state` `tab`.
+
 ## 0.4.0
 
 - Fix the initial page view being lost when the client starts disabled: the latest screen seen while disabled is sent as the initial page view when `Dash0.enabled = true` is set. Screens are no longer marked as seen while nothing was sent.

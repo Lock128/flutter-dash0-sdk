@@ -9,6 +9,8 @@ export 'src/instrumentation/http_client.dart' show Dash0HttpClient;
 export 'src/instrumentation/http_overrides.dart' show Dash0HttpOverrides;
 export 'src/instrumentation/http_common.dart' show Dash0HttpSpan;
 export 'src/instrumentation/navigation.dart' show Dash0NavigatorObserver;
+export 'src/instrumentation/sub_screens.dart'
+    show Dash0TabObserver, subScreenPath, trackSubScreen;
 export 'src/instrumentation/profiling.dart'
     show LongTaskMonitor, RuntimeSampler;
 export 'src/instrumentation/rage_clicks.dart'
