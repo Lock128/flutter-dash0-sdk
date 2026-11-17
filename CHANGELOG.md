@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0
+
+- Fix the initial page view being lost when the client starts disabled: the latest screen seen while disabled is sent as the initial page view when `Dash0.enabled = true` is set. Screens are no longer marked as seen while nothing was sent.
+- Report routes without `RouteSettings.name` by the type of their page widget (`/StatisticsScreen`). Controlled by `Dash0Options.nameUnnamedRoutes` (default `true`).
+- Add `Dash0Options.trackPopupRoutes` (default `false`) to report dialogs and bottom sheets (`/popup/<WidgetType>` when unnamed).
+- Strip query strings and fragments from route names.
+- Add `Dash0.createNavigatorObserver()` for nested navigators, `ShellRoute` and `StatefulShellRoute`, and document go_router usage.
+- Add `app.screen.previous.duration_ms` to page views, the time the previous screen was visible. Time while the app was in the background is not counted.
+- Routes named after a minified widget type (release web builds) are not reported, because their names are unstable and indistinguishable. Use named routes or `screenNameResolver` in release web apps.
+- Add `Dash0.startHttpRequest` and `Dash0HttpSpan` to create HTTP client spans for HTTP stacks the SDK cannot instrument, such as Amplify.
+
 ## 0.3.0
 
 - **Breaking:** the default names now match dash0-sdk-web so that Dash0 Web Events can recognize the data: scope and `telemetry.sdk.name` `dash0-web-sdk`, events `browser.page_view`, `browser.error`, `browser.rage_click`, and attributes `dash0.web.event.title`, and `dash0.web.event.id`. Set `Dash0Options.legacyAppNames` to keep the 0.2.0 names.
