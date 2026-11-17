@@ -58,10 +58,14 @@ class HostState extends State<Host> with SingleTickerProviderStateMixin {
     final child = widget.useDefault
         ? DefaultTabController(
             length: 3,
-            child: Builder(builder: (_) {
+            child: Builder(builder: (context) {
+              final c = DefaultTabController.of(context);
               return Dash0TabObserver(
                   parent: '/admin',
                   tabs: names,
+                  controller: c,
+                  index: () => c.index,
+                  isChanging: () => c.indexIsChanging,
                   client: widget.client,
                   firstTabIsParent: widget.firstTabIsParent,
                   child: body(null));
@@ -70,6 +74,8 @@ class HostState extends State<Host> with SingleTickerProviderStateMixin {
             parent: '/admin',
             tabs: names,
             controller: controller,
+            index: () => controller.index,
+            isChanging: () => controller.indexIsChanging,
             client: widget.client,
             firstTabIsParent: widget.firstTabIsParent,
             child: body(controller));

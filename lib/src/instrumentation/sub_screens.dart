@@ -1,5 +1,4 @@
-// ignore: deprecated_member_use
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../client.dart';
 import '../dash0.dart';
@@ -38,13 +37,26 @@ void trackSubScreen(String parent, String sub, {Dash0Client? client}) {
   } catch (_) {}
 }
 
-/// Sends a page view whenever the selected tab of a [TabController] changes.
+/// Sends a page view whenever the selected tab of a tab controller changes.
 ///
-/// Wrap the screen's `TabBar`/`TabBarView` with it. The controller is
-/// [controller] or the nearest `DefaultTabController`. Taps,
-/// `TabController.animateTo` and swipes are all reported. A change is
-/// reported once it has settled: not while the tab is animating towards its
-/// new index and not when the index did not change.
+/// Wrap the screen's `TabBar`/`TabBarView` with it. It is not tied to one
+/// controller class, so it works with the Flutter `TabController`, the
+/// `material_ui` one and `DefaultTabController.of(context)`:
+///
+/// ```dart
+/// Dash0TabObserver(
+///   parent: '/admin',
+///   tabs: ['Overview', 'Failed Payments', 'Disputes'],
+///   controller: _tabController,
+///   index: () => _tabController.index,
+///   isChanging: () => _tabController.indexIsChanging,
+///   child: Column(children: [TabBar(...), Expanded(child: TabBarView(...))]),
+/// )
+/// ```
+///
+/// Taps, `animateTo` and swipes are all reported. A change is reported once
+/// it has settled: not while the tab is animating towards its new index
+/// ([isChanging] is true) and not when the index did not change.
 ///
 /// Tab `i` is reported as `subScreenPath(parent, tabs[i])`. [parent] must be
 /// the name of the route that shows the tabs, so that the tab names extend
@@ -53,22 +65,15 @@ void trackSubScreen(String parent, String sub, {Dash0Client? client}) {
 /// observer already sent when the route was pushed. The initial tab is then
 /// not sent twice. Set it to false to report `<parent>/<tabs[0]>` as well.
 /// A controller that starts at another index than 0 reports its initial tab.
-///
-/// ```dart
-/// Dash0TabObserver(
-///   parent: '/admin',
-///   tabs: ['Overview', 'Failed Payments', 'Disputes'],
-///   controller: _tabController,
-///   child: Column(children: [TabBar(...), Expanded(child: TabBarView(...))]),
-/// )
-/// ```
 class Dash0TabObserver extends StatefulWidget {
   const Dash0TabObserver({
     super.key,
     required this.parent,
     required this.tabs,
+    required this.controller,
+    required this.index,
     required this.child,
-    this.controller,
+    this.isChanging,
     this.firstTabIsParent = true,
     this.client,
   });
@@ -79,8 +84,15 @@ class Dash0TabObserver extends StatefulWidget {
   /// Fixed human readable tab names, one per tab, in tab order.
   final List<String> tabs;
 
-  /// The tab controller. Defaults to the nearest `DefaultTabController`.
-  final TabController? controller;
+  /// The tab controller. It notifies when the index or the animation changes.
+  final Listenable controller;
+
+  /// Returns the selected tab index, `controller.index`.
+  final int Function() index;
+
+  /// Returns whether the controller is animating to a new tab,
+  /// `controller.indexIsChanging`. Defaults to never.
+  final bool Function()? isChanging;
 
   /// Report the first tab as [parent] instead of `<parent>/<tabs[0]>`.
   final bool firstTabIsParent;
@@ -95,66 +107,49 @@ class Dash0TabObserver extends StatefulWidget {
 }
 
 class _Dash0TabObserverState extends State<Dash0TabObserver> {
-  TabController? _attached;
   int? _lastReported;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _attach();
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onChange);
+    // The route page view covers the first tab.
+    _lastReported = widget.firstTabIsParent ? 0 : null;
+    _report();
   }
 
   @override
   void didUpdateWidget(Dash0TabObserver oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _attach();
-  }
-
-  void _attach() {
-    TabController? next;
-    try {
-      next = widget.controller ?? DefaultTabController.maybeOf(context);
-    } catch (_) {
-      next = null;
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller.removeListener(_onChange);
+      widget.controller.addListener(_onChange);
+      _lastReported = widget.firstTabIsParent ? 0 : null;
+      _report();
     }
-    if (identical(next, _attached)) return;
-    _attached?.removeListener(_onChange);
-    _attached = next;
-    _lastReported = null;
-    if (next == null) return;
-    next.addListener(_onChange);
-    // The route page view covers the first tab.
-    _lastReported = widget.firstTabIsParent ? 0 : null;
-    _report(next);
   }
 
-  void _onChange() {
-    final controller = _attached;
-    if (controller == null) return;
-    _report(controller);
-  }
+  void _onChange() => _report();
 
-  void _report(TabController controller) {
+  void _report() {
     try {
-      if (controller.indexIsChanging) return;
-      final index = controller.index;
+      if (widget.isChanging?.call() ?? false) return;
+      final index = widget.index();
       if (index == _lastReported) return;
       _lastReported = index;
       if (index < 0 || index >= widget.tabs.length) return;
-      final parent = widget.parent;
-      final name = index == 0 && widget.firstTabIsParent
-          ? parent
-          : subScreenPath(parent, widget.tabs[index]);
       final client = widget.client ?? Dash0.client;
       if (client == null) return;
+      final name = index == 0 && widget.firstTabIsParent
+          ? widget.parent
+          : subScreenPath(widget.parent, widget.tabs[index]);
       trackScreenView(client, name, changeState: 'tab');
     } catch (_) {}
   }
 
   @override
   void dispose() {
-    _attached?.removeListener(_onChange);
-    _attached = null;
+    widget.controller.removeListener(_onChange);
     super.dispose();
   }
 
