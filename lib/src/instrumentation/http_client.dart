@@ -2,6 +2,7 @@ import 'package:http/http.dart' as http;
 
 import '../client.dart';
 import '../debug.dart';
+import 'graphql.dart';
 import 'http_common.dart';
 
 /// A `package:http` client that creates a client span for every request,
@@ -43,6 +44,12 @@ class Dash0HttpClient extends http.BaseClient {
     }
 
     try {
+      _nameGraphQLOperation(call, request);
+    } catch (e) {
+      dash0Debug('Failed to inspect GraphQL request', e);
+    }
+
+    try {
       final response = await runMarkedAsHandled(() => _inner.send(request));
       call.setResponse(
         response.statusCode,
@@ -56,6 +63,20 @@ class Dash0HttpClient extends http.BaseClient {
       call.finish(error: e, stackTrace: st);
       rethrow;
     }
+  }
+
+  /// Names the operation of a JSON POST. Only requests whose body is already
+  /// in memory (`http.Request`) are inspected.
+  void _nameGraphQLOperation(HttpCall call, http.BaseRequest request) {
+    if (request is! http.Request || call.method != 'POST') return;
+    final type = request.headers.entries
+        .where((e) => e.key.toLowerCase() == 'content-type')
+        .map((e) => e.value.toLowerCase())
+        .firstOrNull;
+    if (type == null || !type.contains('json')) return;
+    if (request.bodyBytes.length > maxGraphQLRequestBytes) return;
+    final operation = Dash0GraphQLOperation.tryParse(request.body);
+    if (operation != null) call.setGraphQLOperation(operation);
   }
 
   @override

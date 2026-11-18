@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- Name GraphQL operations. Spans get `graphql.operation.name` and `graphql.operation.type` and are called `HTTP POST <OperationName>`. `Dash0HttpClient` does this for JSON POST requests of `http.Request`.
+- Detect GraphQL errors in HTTP 200 responses: the span gets error status and `error.type` (`errorType`, `extensions.code` or `GraphQLError`). Error messages, query text and variables are never recorded.
+- Add the histogram `graphql.client.operation.duration` (seconds). Distinct operation names are capped at 100, further names are `_OTHER`.
+- Add `Dash0GraphQLOperation`, `Dash0GraphQLErrors`, `Dash0GraphQL.inspectRequestBody`, `Dash0GraphQL.inspectResponse`, `Dash0HttpSpan.setGraphQLOperation` and `Dash0HttpSpan.setGraphQLErrors` for HTTP stacks that are not instrumented, such as AWS Amplify.
+- Add `Dash0Span.updateName`.
+- README: GraphQL section and a checklist to verify signals in Dash0.
+
 ## 0.6.0
 
 - Tell clients apart. Every event, span and log carries `app.client.type` (`web-desktop`, `web-mobile`, `ios`, `android`, `macos`, `windows`, `linux`, `fuchsia`). The resource, which also covers metrics, carries `app.client.type`, `app.runtime` (`flutter-web` or `flutter-native`) and `os.name`.

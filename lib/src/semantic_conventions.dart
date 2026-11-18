@@ -79,6 +79,10 @@ const serverPort = 'server.port';
 
 // Metric names
 const metricHttpClientRequestDuration = 'http.client.request.duration';
+const metricGraphQLClientOperationDuration =
+    'graphql.client.operation.duration';
+const graphQLOperationName = 'graphql.operation.name';
+const graphQLOperationType = 'graphql.operation.type';
 
 // Vitals metrics
 const metricAppStartDuration = 'app.start.duration';

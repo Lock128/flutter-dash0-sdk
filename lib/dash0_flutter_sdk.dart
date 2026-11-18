@@ -7,6 +7,8 @@ export 'src/client_info.dart'
 export 'src/client.dart' show Dash0Client, dash0SdkVersion;
 export 'src/dash0.dart' show Dash0;
 export 'src/ids.dart' show generateSpanId, generateTraceId, isSessionSampledIn;
+export 'src/instrumentation/graphql.dart'
+    show Dash0GraphQL, Dash0GraphQLErrors, Dash0GraphQLOperation;
 export 'src/instrumentation/http_client.dart' show Dash0HttpClient;
 export 'src/instrumentation/http_overrides.dart' show Dash0HttpOverrides;
 export 'src/instrumentation/http_common.dart' show Dash0HttpSpan;
