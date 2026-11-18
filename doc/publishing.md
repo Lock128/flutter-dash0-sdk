@@ -20,7 +20,7 @@ pub.dev only allows automated publishing after the package exists, so the first 
    created on first use. If you enable it on pub.dev, the names must match.
 
 The workflow `.github/workflows/publish.yml` runs on tags matching `v[0-9]+.[0-9]+.[0-9]+*`. It installs Flutter with
-`subosito/flutter-action`, runs analyze and tests, then `dart pub publish --force`, authenticating with OIDC
+`subosito/flutter-action`, runs analyze and tests, then `flutter pub publish --force`, after checking that the tag matches the `pubspec.yaml` version and is on `main`, authenticating with OIDC
 (`id-token: write`), so no secret is stored. The reusable workflow `dart-lang/setup-dart/.github/workflows/publish.yml`
 is not used because it installs only the Dart SDK and cannot resolve the Flutter SDK dependency of this package.
 
