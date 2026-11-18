@@ -101,6 +101,22 @@ void main() {
     expect(parseRepositoryUrl('nonsense'), isNull);
   });
 
+  test('credentials are removed from the repository url', () async {
+    expect(stripUserInfo('https://user:token@github.com/o/r.git'),
+        'https://github.com/o/r.git');
+    expect(stripUserInfo('https://github.com/o/r'), 'https://github.com/o/r');
+    final (c, _) = await start({
+      'DASH0_VCS_REPOSITORY_URL_FULL':
+          'https://x-access-token:s3@github.com/o/r.git',
+    });
+    expect(res(c, 'vcs.repository.url.full'), 'https://github.com/o/r.git');
+    expect(res(c, 'vcs.owner.name'), 'o');
+    final (c2, _) = await start({},
+        vcs: const Dash0VcsAttributes(
+            repositoryUrlFull: 'https://u:p@example.com/o/r'));
+    expect(res(c2, 'vcs.repository.url.full'), 'https://example.com/o/r');
+  });
+
   test('vcs and deployment attributes appear on logs, spans and metrics',
       () async {
     final (c, t) = await start({

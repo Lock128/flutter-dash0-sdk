@@ -508,6 +508,8 @@ Dash0.runGuarded(() => runApp(const MyApp())); // captures print in this zone
 Dash0.log(Dash0ConsoleLevel.warn, 'Cache miss', error: e, stackTrace: st);
 ```
 
+- Warning: everything printed through these sources is uploaded to Dash0 and only URLs are scrubbed. Do not print
+  tokens or personal data, and add patterns such as `RegExp(r'token=|password')` to `ignoreMessages` to drop them.
 - Sources: `debugPrint` (the original is still called), `print` inside `Dash0.runGuarded` and `Dash0.log`.
 - Attributes: `dash0.web.console.method` (`log`, `info`, `warn`, `error`, `debug`, `trace`), the message as event body,
   `exception.*` when `Dash0.log` gets an `error`, `code.stacktrace` for `trace`. Severity: `trace` and `debug` are

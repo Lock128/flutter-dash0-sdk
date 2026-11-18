@@ -138,13 +138,15 @@ class ErrorInstrumentation {
     _recent[key] = now;
     _reported++;
 
+    final scrubbed = _cut(_scrubUrls(message), _maxMessageLength);
+
     _client.emitEvent(
       _client.names.error,
       severity: Dash0Severity.error,
-      data: message,
+      data: scrubbed,
       attributes: {
         sc.exceptionType: type,
-        sc.exceptionMessage: _cut(_scrubUrls(message), _maxMessageLength),
+        sc.exceptionMessage: scrubbed,
         if (stack.isNotEmpty)
           sc.exceptionStacktrace: sanitizeStackTrace(
             stack,

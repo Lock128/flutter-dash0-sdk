@@ -33,6 +33,14 @@ String? _clean(String? v) {
   return t == null || t.isEmpty ? null : t;
 }
 
+/// Removes credentials (`user:token@`) from [url]. Other parts are kept.
+String stripUserInfo(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || uri.userInfo.isEmpty) return url;
+  return url.replaceFirstMapped(
+      RegExp(r'^([a-zA-Z][a-zA-Z0-9+.-]*://)[^/?#@]*@'), (m) => m[1]!);
+}
+
 /// Returns the non-empty value of [key] in [env], or null.
 String? buildEnv(Map<String, String> env, String key) => _clean(env[key]);
 
@@ -80,6 +88,7 @@ Map<String, String> resolveVcsAttributes(
   final revision = pick(o?.refHeadRevision, 'DASH0_VCS_REF_HEAD_REVISION');
   final change = pick(o?.changeId, 'DASH0_VCS_CHANGE_ID');
 
+  if (url != null) url = stripUserInfo(url);
   final parsed = parseRepositoryUrl(url);
   if (parsed != null) {
     provider ??= parsed.provider;

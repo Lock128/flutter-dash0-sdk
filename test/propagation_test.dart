@@ -121,6 +121,19 @@ void main() {
       );
     });
 
+    test('relative urls and other schemes get no same-origin headers', () {
+      expect(originOf('/api/items'), isNull);
+      expect(originOf('ftp://app.example.com/x'), isNull);
+      expect(
+        determinePropagatorTypes(
+          const [],
+          '/api/items',
+          pageOrigin: 'https://app.example.com',
+        ),
+        isEmpty,
+      );
+    });
+
     test('without a page origin nothing changes', () {
       expect(determinePropagatorTypes(const [], 'https://app.example.com/x'),
           isEmpty);

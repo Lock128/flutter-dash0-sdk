@@ -186,6 +186,16 @@ void main() {
         'see https://REDACTED:REDACTED@example.com/x');
   });
 
+  test('scrubs and cuts the event body like the message attribute', () async {
+    final (client, transport) = await start();
+    client.reportError('see https://user:pw@example.com/x');
+    client.reportError('b' * 400);
+    await client.flush();
+    expect((transport.logs[0]['body']! as Map)['stringValue'],
+        'see https://REDACTED:REDACTED@example.com/x');
+    expect((transport.logs[1]['body']! as Map)['stringValue'], 'b' * 300);
+  });
+
   test('cuts and scrubs the component stack', () async {
     final (client, transport) = await start();
     client.reportError('e1',
