@@ -10,7 +10,7 @@ Native iOS and Android telemetry fixes.
 
 ## 0.9.0
 
-Closes the gaps to dash0-sdk-web 0.35.1 that make sense on Flutter. See `docs/web-sdk-gap-analysis.md`.
+Closes the gaps to dash0-sdk-web 0.35.1 that make sense on Flutter. See `doc/web-sdk-gap-analysis.md`.
 
 Resource and options (read from the web SDK source):
 
@@ -33,7 +33,7 @@ New behavior (read from the web SDK source, Dash0 UI display is a guess):
 Docs:
 
 - README: new options, dart-define examples, console capture, `startView`, `setParentTraceContext` and the list of web SDK features that do not apply to Flutter.
-- Add `docs/web-sdk-gap-analysis.md`.
+- Add `doc/web-sdk-gap-analysis.md`.
 - No Dash0 MCP server was available, so nothing here was checked against a live dataset.
 - `publish_to: none` is unchanged.
 

@@ -1,8 +1,15 @@
 name: dash0_flutter_sdk
-description: Flutter SDK for Dash0 real user monitoring. Sends page views, HTTP spans, errors, metrics, vitals, session replay and custom events as OTLP/HTTP JSON, modeled on dash0-sdk-web.
+description: Flutter SDK for Dash0 real user monitoring. Sends page views, HTTP spans, errors, metrics, vitals and custom events as OTLP/HTTP JSON.
 version: 0.10.0
 repository: https://github.com/Lock128/flutter-dash0-sdk
-publish_to: none
+homepage: https://github.com/Lock128/flutter-dash0-sdk
+issue_tracker: https://github.com/Lock128/flutter-dash0-sdk/issues
+topics:
+  - observability
+  - opentelemetry
+  - monitoring
+  - telemetry
+  - rum
 
 environment:
   sdk: ">=3.3.0 <4.0.0"

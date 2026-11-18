@@ -1,0 +1,29 @@
+name: Publish to pub.dev
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pub.dev
+    permissions:
+      id-token: write # Required for OIDC authentication with pub.dev
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      # The reusable dart-lang/setup-dart publish workflow installs only the Dart
+      # SDK, which cannot resolve a package that depends on the Flutter SDK. This
+      # job installs Flutter instead and publishes with the OIDC token that
+      # dart-lang/setup-dart writes for pub.dev.
+      - uses: dart-lang/setup-dart@v1
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: dart pub publish --force

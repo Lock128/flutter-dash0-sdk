@@ -26,7 +26,20 @@ package.
 - Public API: `sendEvent`, `startSpan`, `trace`, `reportError`, `identify`, `addSignalAttribute`,
   `removeSignalAttribute`, `terminateSession`, `flush`, `shutdown` and a runtime `enabled` switch.
 
+## Supported platforms
+
+iOS, Android, web, macOS, Windows and Linux.
+
 ## Installation
+
+Install from [pub.dev](https://pub.dev/packages/dash0_flutter_sdk):
+
+```yaml
+dependencies:
+  dash0_flutter_sdk: ^0.10.0
+```
+
+To track the latest unreleased code, use the git dependency instead:
 
 ```yaml
 dependencies:
@@ -738,11 +751,11 @@ telemetry.
 | Numbers sent as `doubleValue`, status code as string | Ints as `intValue`, status code as int (OTLP allows both, a guess that Dash0 accepts both) |
 
 The full comparison, with web SDK source paths for each row and what is verified or a guess, is in
-[docs/web-sdk-gap-analysis.md](docs/web-sdk-gap-analysis.md).
+[doc/web-sdk-gap-analysis.md](doc/web-sdk-gap-analysis.md).
 
 ## Publishing
 
-`pubspec.yaml` has `publish_to: none`, so `dart pub publish` refuses to run. Remove that line to publish to pub.dev.
+The package is published on [pub.dev](https://pub.dev/packages/dash0_flutter_sdk). Release steps are in [doc/publishing.md](doc/publishing.md).
 
 ## Development
 
