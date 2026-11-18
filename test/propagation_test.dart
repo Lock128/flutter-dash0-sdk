@@ -69,4 +69,61 @@ void main() {
     );
     expect(determinePropagatorTypes(propagators, 'https://other.io'), isEmpty);
   });
+
+  group('same origin on web', () {
+    final propagators = [
+      Dash0Propagator(
+        type: Dash0PropagatorType.xray,
+        match: [RegExp(r'amazonaws\.com')],
+      ),
+    ];
+
+    test('adds traceparent and all configured types', () {
+      expect(
+        determinePropagatorTypes(
+          propagators,
+          'https://app.example.com/api/items',
+          pageOrigin: 'https://app.example.com',
+        ),
+        [Dash0PropagatorType.traceparent, Dash0PropagatorType.xray],
+      );
+    });
+
+    test('other origins use the match rules', () {
+      expect(
+        determinePropagatorTypes(
+          propagators,
+          'https://other.example.com/api',
+          pageOrigin: 'https://app.example.com',
+        ),
+        isEmpty,
+      );
+      expect(
+        determinePropagatorTypes(
+          propagators,
+          'http://app.example.com/api',
+          pageOrigin: 'https://app.example.com',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('default ports are the same origin', () {
+      expect(
+          originOf('https://App.example.com:443/x'), 'https://app.example.com');
+      expect(
+        determinePropagatorTypes(
+          const [],
+          'https://app.example.com:443/x',
+          pageOrigin: 'https://app.example.com',
+        ),
+        [Dash0PropagatorType.traceparent],
+      );
+    });
+
+    test('without a page origin nothing changes', () {
+      expect(determinePropagatorTypes(const [], 'https://app.example.com/x'),
+          isEmpty);
+    });
+  });
 }

@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 
 import 'client.dart';
+import 'instrumentation/console.dart' show Dash0ConsoleLevel;
 import 'instrumentation/http_client.dart';
 import 'instrumentation/http_common.dart';
 import 'metrics/instruments.dart';
@@ -135,12 +136,39 @@ class Dash0 {
   /// Stops recording the session replay and sends what was recorded.
   static void stopReplay() => _client?.stopReplay();
 
-  /// Runs [body] in a guarded zone that reports uncaught errors.
+  /// Runs [body] in a guarded zone that reports uncaught errors. With
+  /// `Dash0Instrumentation.console` enabled, `print` calls in the zone are
+  /// captured as `browser.console` events and still printed.
   static R? runGuarded<R>(R Function() body) {
-    return runZonedGuarded(body, (error, stack) {
-      reportError(error, stackTrace: stack);
-    });
+    return runZonedGuarded(
+      body,
+      (error, stack) {
+        reportError(error, stackTrace: stack);
+      },
+      zoneSpecification: ZoneSpecification(
+        print: (self, parent, zone, line) {
+          try {
+            _client?.console?.capturePrint(line, zone);
+          } catch (_) {
+            // Telemetry must never throw into the app.
+          }
+          parent.print(zone, line);
+        },
+      ),
+    );
   }
+
+  /// Sends [message] as a `browser.console` event. Needs
+  /// `Dash0Instrumentation.console`. With [error] the `exception.*`
+  /// attributes are added. Subject to the console rate limits and
+  /// `Dash0ConsoleOptions.ignoreMessages`.
+  static void log(
+    Dash0ConsoleLevel level,
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) =>
+      _client?.log(level, message, error: error, stackTrace: stackTrace);
 
   /// Sends a page view for [screenName]. Use for navigation that is not
   /// observed by the navigator observer.
@@ -149,6 +177,20 @@ class Dash0 {
     if (c == null) return;
     trackScreenView(c, screenName, attributes: attributes);
   }
+
+  /// Sends a virtual page view (`browser.page_view`, type 1) for [name]
+  /// without changing the current screen, like `startView` of dash0-sdk-web.
+  /// [url] overrides the `page.url.*` attributes: absolute http(s) and `app`
+  /// URLs are used as is, other values are a path on the `app://` scheme.
+  /// [attributes] are added last and can override SDK attributes.
+  /// [trackScreen] stays available for compatibility.
+  static void startView(String name, {String? url, Attributes? attributes}) =>
+      _client?.startView(name, url: url, attributes: attributes);
+
+  /// Makes spans without a parent join the trace of [traceparent], see
+  /// [Dash0Client.setParentTraceContext]. Null clears it.
+  static void setParentTraceContext(String? traceparent) =>
+      _client?.setParentTraceContext(traceparent);
 
   /// Sends a custom event. See [Dash0Client.sendEvent].
   static void sendEvent(

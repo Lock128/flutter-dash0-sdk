@@ -73,8 +73,12 @@ class HttpCall {
 
   /// Trace context headers to add to the request, empty if no propagator
   /// matches.
-  Map<String, String> propagationHeaders(String url) {
-    final types = determinePropagatorTypes(client.options.propagators, url);
+  Map<String, String> propagationHeaders(String url, {String? pageOrigin}) {
+    final types = determinePropagatorTypes(
+      client.options.propagators,
+      url,
+      pageOrigin: pageOrigin ?? currentPageOrigin,
+    );
     if (types.isEmpty) return const {};
     return traceContextHeaders(types, span.traceId, span.spanId);
   }
@@ -134,7 +138,11 @@ class HttpCall {
     if (_finished) return;
     _finished = true;
     try {
-      if (error != null) {
+      if (error != null && _isAbort(error)) {
+        // Cancelled by the app, not a failure, like aborted fetches in the
+        // web SDK.
+        span.setAttribute(sc.webRequestCancelled, true);
+      } else if (error != null) {
         span.setAttribute(sc.errorType, error.runtimeType.toString());
         span.recordException(error, stackTrace);
         span.setStatus(sc.spanStatusError, _scrubMessage(error.toString()));
@@ -170,6 +178,11 @@ class HttpCall {
       // Telemetry must never throw into the app.
     }
   }
+
+  /// `RequestAbortedException` of package:http 1.5 and later, matched by name
+  /// to keep compatibility with older versions.
+  static bool _isAbort(Object error) =>
+      error.runtimeType.toString() == 'RequestAbortedException';
 
   String _scrubMessage(String message) {
     return message.replaceAllMapped(

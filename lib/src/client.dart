@@ -9,6 +9,7 @@ import 'client_probe.dart' show probeViewport;
 import 'debug.dart';
 import 'ids.dart';
 import 'ignore_rules.dart';
+import 'instrumentation/console.dart';
 import 'instrumentation/errors.dart';
 import 'instrumentation/http_overrides.dart';
 import 'instrumentation/navigation.dart';
@@ -18,6 +19,7 @@ import 'instrumentation/vitals.dart';
 import 'metrics/instruments.dart';
 import 'metrics/registry.dart';
 import 'options.dart';
+import 'propagation.dart' show parseTraceparent;
 import 'otlp.dart';
 import 'rate_limiter.dart';
 import 'replay/recorder.dart';
@@ -30,7 +32,7 @@ import 'url_attributes.dart';
 import 'vcs.dart';
 
 /// Version reported as `telemetry.sdk.version`.
-const dash0SdkVersion = '0.8.0';
+const dash0SdkVersion = '0.9.0';
 
 /// Legacy scope name, reported with `Dash0Options.legacyAppNames`.
 const dash0ScopeName = 'dash0-flutter-sdk';
@@ -130,6 +132,8 @@ class Dash0Client with WidgetsBindingObserver {
         ignoreUrls: options.ignoreUrls,
         ignoreErrorMessages: options.ignoreErrorMessages,
         endpoints: options.allEndpoints,
+        ignoreCrossOriginScriptErrors: options.ignoreCrossOriginScriptErrors,
+        ignoreBrowserExtensionErrors: options.ignoreBrowserExtensionErrors,
       ),
       sessionId,
       nowMillis: nowMillis,
@@ -158,6 +162,9 @@ class Dash0Client with WidgetsBindingObserver {
       if (options.isEnabled(Dash0Instrumentation.sessionReplay) &&
           options.replay.enabled) {
         client.replay = ReplayRecorder(client)..install();
+      }
+      if (options.isExplicitlyEnabled(Dash0Instrumentation.console)) {
+        client.console = ConsoleInstrumentation(client)..install();
       }
       if (options.isExplicitlyEnabled(Dash0Instrumentation.profiling)) {
         client._longTasks = LongTaskMonitor(client)..install();
@@ -266,6 +273,10 @@ class Dash0Client with WidgetsBindingObserver {
   /// The vitals instrumentation, null when disabled. Public for
   /// instrumentations.
   VitalsInstrumentation? vitals;
+
+  /// The console capture, null unless `Dash0Instrumentation.console` is
+  /// enabled. Public for `Dash0.runGuarded`.
+  ConsoleInstrumentation? console;
 
   /// The session replay recorder, null when disabled. Public for
   /// instrumentations.
@@ -464,8 +475,29 @@ class Dash0Client with WidgetsBindingObserver {
   Attributes pageUrlAttributes() {
     final screen = currentScreen;
     if (screen == null) return const {};
+    return pageUrlAttributesFor(screen);
+  }
+
+  /// `page.url.*` attributes for [url]. Absolute http(s) and `app` URLs are
+  /// used as is, anything else is a path (or screen name) on the `app`
+  /// scheme.
+  Attributes pageUrlAttributesFor(String url) {
     try {
-      final name = screen.replaceFirst(RegExp(r'^/+'), '');
+      final absolute = Uri.tryParse(url);
+      if (absolute != null &&
+          absolute.hasScheme &&
+          absolute.host.isNotEmpty &&
+          const {'http', 'https', 'app'}.contains(absolute.scheme)) {
+        final full = scrubUrl(url, options.urlScrubber);
+        final scrubbed = Uri.tryParse(full) ?? absolute;
+        return {
+          sc.pageUrlFull: full,
+          sc.pageUrlScheme: scrubbed.scheme,
+          sc.pageUrlDomain: scrubbed.host,
+          sc.pageUrlPath: scrubbed.path.isEmpty ? '/' : scrubbed.path,
+        };
+      }
+      final name = url.replaceFirst(RegExp(r'^/+'), '');
       final full = scrubUrl('$_pageScheme://$name', options.urlScrubber);
       final rest = full.startsWith('$_pageScheme://')
           ? full.substring(_pageScheme.length + 3)
@@ -487,6 +519,16 @@ class Dash0Client with WidgetsBindingObserver {
 
   // ---------------------------------------------------------------------
   // Events and logs
+
+  /// Sends a virtual page view without changing the current screen. See
+  /// `Dash0.startView`.
+  void startView(String name, {String? url, Attributes? attributes}) {
+    try {
+      startViewEvent(this, name, url: url, attributes: attributes);
+    } catch (e) {
+      dash0Debug('startView failed', e);
+    }
+  }
 
   /// Sends a custom event as a log record. Names reserved by the SDK are
   /// rejected.
@@ -557,6 +599,18 @@ class Dash0Client with WidgetsBindingObserver {
     );
   }
 
+  /// Sends [message] as a `browser.console` event with the given [level].
+  /// With [error] the `exception.*` attributes are added. Does nothing unless
+  /// `Dash0Instrumentation.console` is enabled.
+  void log(
+    Dash0ConsoleLevel level,
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    console?.capture(level, message, error: error, stackTrace: stackTrace);
+  }
+
   // ---------------------------------------------------------------------
   // Spans
 
@@ -570,13 +624,15 @@ class Dash0Client with WidgetsBindingObserver {
     DateTime? startTime,
   }) {
     final p = parent ?? Dash0Span.current;
-    final traceId = p?.traceId ?? generateTraceId(_sessionId);
+    final remote = p == null ? _parentTraceContext : null;
+    final traceId =
+        p?.traceId ?? remote?.traceId ?? generateTraceId(_sessionId);
     final spanId = generateSpanId(traceId);
     return Dash0Span.internal(
       name: name,
       traceId: traceId,
       spanId: spanId,
-      parentSpanId: p?.spanId,
+      parentSpanId: p?.spanId ?? remote?.spanId,
       kind: kind,
       attributes: {
         ...commonAttributes(),
@@ -586,6 +642,26 @@ class Dash0Client with WidgetsBindingObserver {
       startTimeUnixNano: startTime != null ? toNanos(startTime) : null,
       onEnd: (span) => sendSpan(span.toJson()),
     );
+  }
+
+  ({String traceId, String spanId})? _parentTraceContext;
+
+  /// Makes spans that have no parent and are not started inside [trace] join
+  /// the trace of [traceparent] (`00-<32 hex>-<16 hex>-<2 hex>`), for example
+  /// one received from a backend. The span id becomes their `parentSpanId`.
+  /// Null clears it. Invalid values are ignored.
+  void setParentTraceContext(String? traceparent) {
+    if (traceparent == null) {
+      _parentTraceContext = null;
+      return;
+    }
+    final parsed = parseTraceparent(traceparent);
+    if (parsed == null) {
+      dash0Debug(
+          'Invalid traceparent. Ignoring parent trace context.', traceparent);
+      return;
+    }
+    _parentTraceContext = parsed;
   }
 
   /// Runs [body] inside a new span. The span is current for the duration, so
@@ -892,6 +968,7 @@ class Dash0Client with WidgetsBindingObserver {
     vitals?.uninstall();
     _rageClicks?.uninstall();
     _errors.uninstall();
+    console?.uninstall();
     if (_observingLifecycle) {
       WidgetsBinding.instance.removeObserver(this);
     }

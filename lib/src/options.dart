@@ -63,6 +63,11 @@ enum Dash0Instrumentation {
   /// only active when listed in `Dash0Options.enabledInstrumentations`.
   /// `Dash0.profile` works regardless.
   profiling,
+
+  /// Captures `debugPrint`, `print` calls inside `Dash0.runGuarded` and
+  /// `Dash0.log` as `browser.console` events. Opt-in: only active when listed
+  /// in `Dash0Options.enabledInstrumentations`. `Dash0.log` also needs it.
+  console,
 }
 
 /// How metric values are reported over time.
@@ -292,6 +297,36 @@ class Dash0ProfilingOptions {
   }
 }
 
+/// Settings of the console capture.
+class Dash0ConsoleOptions {
+  const Dash0ConsoleOptions({
+    this.ignoreMessages = const [],
+    this.maxMessageLength = 4096,
+    this.captureDebugPrint = true,
+    this.capturePrint = true,
+  });
+
+  /// Messages matching are not sent. A [String] matches when the message
+  /// contains it, a [RegExp] is tested against the message.
+  final List<Pattern> ignoreMessages;
+
+  /// Longer messages are cut and end in the character `\u2026`.
+  final int maxMessageLength;
+
+  /// Capture calls of `debugPrint`.
+  final bool captureDebugPrint;
+
+  /// Capture `print` calls inside `Dash0.runGuarded`.
+  final bool capturePrint;
+
+  void validate() {
+    if (maxMessageLength < 1) {
+      throw ArgumentError.value(
+          maxMessageLength, 'maxMessageLength', 'must be at least 1');
+    }
+  }
+}
+
 /// Version control attributes sent as `vcs.*` resource attributes.
 class Dash0VcsAttributes {
   const Dash0VcsAttributes({
@@ -360,6 +395,9 @@ class Dash0Options {
     this.sessionReplaySamplingRate = 0,
     this.replay = const Dash0ReplayOptions(),
     this.profiling = const Dash0ProfilingOptions(),
+    this.console = const Dash0ConsoleOptions(),
+    this.ignoreCrossOriginScriptErrors = true,
+    this.ignoreBrowserExtensionErrors = true,
   });
 
   /// Value of `service.name`.
@@ -518,6 +556,17 @@ class Dash0Options {
   /// Settings of the profiling instrumentation.
   final Dash0ProfilingOptions profiling;
 
+  /// Settings of the console capture.
+  final Dash0ConsoleOptions console;
+
+  /// Drops errors with the message `Script error.`, which browsers report for
+  /// errors of cross-origin scripts. Relevant on Flutter web only.
+  final bool ignoreCrossOriginScriptErrors;
+
+  /// Drops errors whose stack frames with a URL all belong to browser
+  /// extensions. Relevant on Flutter web only.
+  final bool ignoreBrowserExtensionErrors;
+
   /// All configured endpoints.
   List<Dash0Endpoint> get allEndpoints => [
         if (endpoint != null) endpoint!,
@@ -591,5 +640,6 @@ class Dash0Options {
     rageClicks.validate();
     replay.validate();
     profiling.validate();
+    console.validate();
   }
 }

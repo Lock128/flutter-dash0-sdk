@@ -66,6 +66,13 @@ const exceptionType = 'exception.type';
 const exceptionStacktrace = 'exception.stacktrace';
 const errorType = 'error.type';
 
+/// Console capture attributes.
+const consoleMethod = 'dash0.web.console.method';
+const codeStacktrace = 'code.stacktrace';
+
+/// Set on requests that were aborted by the app.
+const webRequestCancelled = 'dash0.web.request.cancelled';
+
 // Page URL attributes (dash0-sdk-web attributes/url.ts with a `page` prefix)
 const pageUrlFull = 'page.url.full';
 const pageUrlScheme = 'page.url.scheme';
@@ -142,12 +149,14 @@ class EventNames {
   static const pageView = 'app.page_view';
   static const error = 'app.error';
   static const rageClick = 'app.rage_click';
+  static const console = 'app.console';
 
   // Names used by dash0-sdk-web, the default.
   static const webPageView = 'browser.page_view';
   static const webError = 'browser.error';
   static const webRageClick = 'browser.rage_click';
   static const webVital = 'browser.web_vital';
+  static const webConsole = 'browser.console';
 
   static const lifecycle = 'app.lifecycle';
 
@@ -163,6 +172,8 @@ class EventNames {
     webError,
     webRageClick,
     webVital,
+    webConsole,
+    console,
     lifecycle,
     vitals,
     rageClick,
@@ -180,6 +191,7 @@ class Dash0Names {
     required this.pageView,
     required this.error,
     required this.rageClick,
+    required this.console,
     required this.eventTitle,
     required this.eventId,
   });
@@ -189,6 +201,7 @@ class Dash0Names {
   final String pageView;
   final String error;
   final String rageClick;
+  final String console;
   final String eventTitle;
   final String eventId;
 
@@ -198,6 +211,7 @@ class Dash0Names {
     pageView: EventNames.webPageView,
     error: EventNames.webError,
     rageClick: EventNames.webRageClick,
+    console: EventNames.webConsole,
     eventTitle: webEventTitle,
     eventId: webEventId,
   );
@@ -208,6 +222,7 @@ class Dash0Names {
     pageView: EventNames.pageView,
     error: EventNames.error,
     rageClick: EventNames.rageClick,
+    console: EventNames.console,
     eventTitle: _legacyEventTitle,
     eventId: _legacyEventId,
   );

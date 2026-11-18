@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import 'ignore_rules.dart';
 import 'options.dart';
 
@@ -30,12 +32,41 @@ final RegExp _traceparentPattern =
   return (traceId: traceId, spanId: spanId);
 }
 
+/// Origin (`scheme://host:port`) of the page a Flutter web app runs on, or
+/// null on native platforms, which have no page origin.
+String? get currentPageOrigin => kIsWeb ? originOf(Uri.base.toString()) : null;
+
+/// The origin of [url] in the form `scheme://host[:port]`, without the default
+/// port, or null if [url] is not an absolute http(s) URL.
+String? originOf(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) return null;
+  final scheme = uri.scheme.toLowerCase();
+  if (scheme != 'http' && scheme != 'https') return null;
+  final defaultPort = scheme == 'https' ? 443 : 80;
+  final port = uri.hasPort && uri.port != defaultPort ? ':${uri.port}' : '';
+  return '$scheme://${uri.host.toLowerCase()}$port';
+}
+
 /// Propagator types that apply to [url].
+///
+/// With a [pageOrigin] (Flutter web), requests to the same origin always get
+/// `traceparent` plus every configured propagator type, like
+/// `determinePropagatorTypes` of dash0-sdk-web. Other requests, and all
+/// requests without [pageOrigin], use the `match` rules of [propagators].
 List<Dash0PropagatorType> determinePropagatorTypes(
   List<Dash0Propagator> propagators,
-  String url,
-) {
+  String url, {
+  String? pageOrigin,
+}) {
   final types = <Dash0PropagatorType>[];
+  if (pageOrigin != null && originOf(url) == originOf(pageOrigin)) {
+    types.add(Dash0PropagatorType.traceparent);
+    for (final p in propagators) {
+      if (!types.contains(p.type)) types.add(p.type);
+    }
+    return types;
+  }
   for (final p in propagators) {
     if (matchesAny(p.match, url) && !types.contains(p.type)) {
       types.add(p.type);

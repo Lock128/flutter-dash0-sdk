@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../client.dart';
+import '../debug.dart';
 import '../dash0.dart';
 import '../options.dart';
 import '../semantic_conventions.dart' as sc;
@@ -284,4 +285,30 @@ Dash0PageViewMeta? _safeMeta(Dash0Client client, String screenName) {
   } catch (_) {
     return null;
   }
+}
+
+/// Sends a virtual `browser.page_view` for [name] without making it the
+/// current screen, like `startView` of dash0-sdk-web: no `change_state`,
+/// `generatePageViewMetadata` is not used, [url] feeds the `page.url.*`
+/// attributes and [attributes] are added last so they can override.
+void startViewEvent(
+  Dash0Client client,
+  String name, {
+  String? url,
+  Map<String, Object?>? attributes,
+}) {
+  if (name.isEmpty) {
+    dash0Debug('startView requires a non-empty view name. Ignoring it.');
+    return;
+  }
+  if (!client.options.isEnabled(Dash0Instrumentation.navigation)) return;
+  client.emitEvent(
+    client.names.pageView,
+    title: name,
+    attributes: {
+      sc.pageViewType: sc.pageViewTypeVirtual,
+      if (url != null && url.isNotEmpty) ...client.pageUrlAttributesFor(url),
+      ...attributes ?? const {},
+    },
+  );
 }
