@@ -7,6 +7,7 @@ import '../propagation.dart';
 import '../semantic_conventions.dart' as sc;
 import '../span.dart';
 import '../url_attributes.dart';
+import 'graphql.dart';
 
 const _knownMethods = {
   'GET',
@@ -44,6 +45,7 @@ class HttpCall {
   final Uri? uri;
   final Stopwatch _watch;
   bool _finished = false;
+  Dash0GraphQLOperation? _operation;
 
   /// Whether requests to [url] are recorded.
   static bool shouldInstrument(Dash0Client client, String url) =>
@@ -102,6 +104,30 @@ class HttpCall {
     }
   }
 
+  /// Names the span after a GraphQL operation and adds its attributes. Only
+  /// the name and type are recorded, never the query or variables.
+  void setGraphQLOperation(Dash0GraphQLOperation operation) {
+    if (_finished) return;
+    _operation = operation;
+    final name = operation.name;
+    if (name != null) {
+      span.setAttribute(sc.graphQLOperationName, name);
+      span.updateName('HTTP $method $name');
+    }
+    span.setAttribute(sc.graphQLOperationType, operation.type);
+  }
+
+  /// Marks the span as failed because a response with a successful HTTP
+  /// status contained GraphQL errors. The error messages are not recorded.
+  void setGraphQLErrors(Dash0GraphQLErrors errors) {
+    if (_finished) return;
+    span.setAttribute(sc.errorType, errors.type);
+    span.setStatus(
+      sc.spanStatusError,
+      'GraphQL response contained ${errors.count} error(s): ${errors.type}',
+    );
+  }
+
   /// Ends the span and records the duration metric. Only the first call has
   /// an effect. Pass [error] if the request failed.
   void finish({Object? error, StackTrace? stackTrace}) {
@@ -127,6 +153,19 @@ class HttpCall {
           if (errorType != null) sc.errorType: errorType,
         },
       );
+      final op = _operation;
+      if (op != null) {
+        client.recordGraphQLDuration(
+          _watch.elapsedMicroseconds / Duration.microsecondsPerSecond,
+          {
+            if (op.name != null) sc.graphQLOperationName: op.name,
+            sc.graphQLOperationType: op.type,
+            if (errorType != null) sc.errorType: errorType,
+            if (uri != null && uri!.host.isNotEmpty)
+              sc.serverAddress: uri!.host,
+          },
+        );
+      }
     } catch (_) {
       // Telemetry must never throw into the app.
     }
@@ -193,6 +232,27 @@ class Dash0HttpSpan {
     try {
       _call.setResponse(statusCode,
           contentLength: contentLength, reason: reason);
+    } catch (_) {
+      // Telemetry must never throw into the app.
+    }
+  }
+
+  /// Names the span after a GraphQL operation, see
+  /// [Dash0GraphQL.inspectRequestBody]. Call before [finish].
+  void setGraphQLOperation(Dash0GraphQLOperation? operation) {
+    try {
+      if (operation != null) _call.setGraphQLOperation(operation);
+    } catch (_) {
+      // Telemetry must never throw into the app.
+    }
+  }
+
+  /// Marks the span as failed when a successful HTTP response contained
+  /// GraphQL errors, see [Dash0GraphQL.inspectResponse]. Call before
+  /// [finish].
+  void setGraphQLErrors(Dash0GraphQLErrors? errors) {
+    try {
+      if (errors != null) _call.setGraphQLErrors(errors);
     } catch (_) {
       // Telemetry must never throw into the app.
     }

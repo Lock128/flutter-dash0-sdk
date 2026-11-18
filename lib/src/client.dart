@@ -28,7 +28,7 @@ import 'transport.dart';
 import 'url_attributes.dart';
 
 /// Version reported as `telemetry.sdk.version`.
-const dash0SdkVersion = '0.6.0';
+const dash0SdkVersion = '0.7.0';
 
 /// Legacy scope name, reported with `Dash0Options.legacyAppNames`.
 const dash0ScopeName = 'dash0-flutter-sdk';
@@ -190,6 +190,8 @@ class Dash0Client with WidgetsBindingObserver {
   RuntimeSampler? _runtime;
   Timer? _metricTimer;
   Dash0Histogram? _httpDuration;
+  Dash0Histogram? _graphQLDuration;
+  final Set<String> _graphQLNames = {};
   bool _httpOverridesInstalled = false;
   bool _observingLifecycle = false;
   late bool _enabled = options.enabled;
@@ -541,6 +543,30 @@ class Dash0Client with WidgetsBindingObserver {
       description: 'Duration of HTTP client requests.',
     ))
         .record(seconds, attributes: attributes);
+  }
+
+  /// Most distinct GraphQL operation names used as metric attribute. Further
+  /// names are recorded as `_OTHER`.
+  static const maxGraphQLOperationNames = 100;
+
+  /// Records `graphql.client.operation.duration` unless the metrics
+  /// instrumentation is off. Public for instrumentations.
+  void recordGraphQLDuration(double seconds, Attributes attributes) {
+    if (!options.isEnabled(Dash0Instrumentation.metrics)) return;
+    final attrs = {...attributes};
+    final name = attrs[sc.graphQLOperationName];
+    if (name is String &&
+        !_graphQLNames.contains(name) &&
+        !(_graphQLNames.length < maxGraphQLOperationNames &&
+            _graphQLNames.add(name))) {
+      attrs[sc.graphQLOperationName] = '_OTHER';
+    }
+    (_graphQLDuration ??= _metrics.histogram(
+      sc.metricGraphQLClientOperationDuration,
+      unit: 's',
+      description: 'Duration of GraphQL client operations.',
+    ))
+        .record(seconds, attributes: attrs);
   }
 
   void _ensureMetricTimer() {

@@ -268,6 +268,61 @@ span?.finish();
 The span matches the fetch instrumentation of dash0-sdk-web: name `HTTP <METHOD>`, kind client, `http.request.method`,
 `url.*`, `http.response.status_code`, `error.type`, and error status for status codes of 400 and above and failures.
 
+### GraphQL
+
+GraphQL operations are named after the operation, not the endpoint. A span for `query GetX { ... }` is called
+`HTTP POST GetX` and has `graphql.operation.name` and `graphql.operation.type` (`query`, `mutation` or
+`subscription`), following the OpenTelemetry GraphQL conventions. Anonymous operations keep the name `HTTP POST` and
+only get the type. The metric `graphql.client.operation.duration` (seconds) has the same two attributes, `server.address`
+and `error.type` when the operation failed. At most 100 distinct operation names are used as metric attribute, further
+names are recorded as `_OTHER`.
+
+GraphQL servers answer errors with HTTP 200. When the response body has a non empty `errors` array, the span gets error
+status and `error.type` (`errorType` of the first error, else `extensions.code`, else `GraphQLError`), and the
+`http.client.request.duration` and GraphQL metrics carry the same `error.type`. Partial data with errors counts as an
+error.
+
+`Dash0HttpClient` names the operation of `http.Request` POST requests with a JSON body of up to 128 KiB. It cannot see
+the response body, so errors in a 200 response are only detected with the helpers below. For HTTP stacks that are not
+instrumented, such as AWS Amplify, inspect copies of the body streams (`split()` gives an independent copy that does not
+consume the stream of the app):
+
+```dart
+final span = Dash0.startHttpRequest('POST', url);
+final requestCopy = request.split(); // before sending
+final response = await send(request);
+span?.setGraphQLOperation(await Dash0GraphQL.inspectRequestBody(requestCopy));
+span?.setResponse(response.statusCode);
+final responseCopy = response.split(); // before the app reads the body
+span?.setGraphQLErrors(await Dash0GraphQL.inspectResponse(
+  responseCopy,
+  headers: response.headers,
+  statusCode: response.statusCode,
+));
+span?.finish();
+```
+
+`Dash0GraphQLOperation.tryParse(String body)` and `Dash0GraphQLErrors.tryParse(String body)` do the parsing for
+bodies you already have. Amplify sends no `operationName`, so the name is read from the query document.
+
+Privacy: the query text, variables and response data are never recorded, and neither are error messages, because
+servers can echo user input in them. Only the operation name (valid GraphQL names up to 64 characters, others are
+dropped), the operation type, the error type and the error count are used. Requests are only inspected for POST with a
+JSON content type and a body up to 128 KiB. Responses are only read for 2xx with a JSON content type, up to 256 KiB and
+for at most 2 seconds. Event streams are never read. Batched requests (JSON arrays) are not named.
+
+### Verify signals in Dash0
+
+- Logs: scope `dash0-web-sdk`, event names `browser.page_view`, `browser.web_vital`, `browser.error`,
+  `browser.rage_click`, `app.vitals` and `app.lifecycle`.
+- Traces: service `<name>`, spans `HTTP POST` (or `HTTP POST <OperationName>` for GraphQL) with `http.request.method`
+  and `url.full` or `server.address`.
+- Metrics: `http.client.request.duration`, `app.start.duration`, `app.frame.build.duration`,
+  `app.frame.raster.duration`, `app.frame.slow`, `graphql.client.operation.duration` and your custom counters.
+
+Page view, web vital and `app.vitals` log records show no duration. This is by design: the web SDK sends instantaneous
+log records and Dash0 derives durations itself. `app.screen.previous.duration_ms` is a custom attribute.
+
 ### Metrics
 
 ```dart

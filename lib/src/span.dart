@@ -6,7 +6,7 @@ import 'semantic_conventions.dart' as sc;
 /// A span in progress. Call [end] to send it.
 class Dash0Span {
   Dash0Span.internal({
-    required this.name,
+    required String name,
     required this.traceId,
     required this.spanId,
     required this.parentSpanId,
@@ -14,10 +14,18 @@ class Dash0Span {
     required this.attributes,
     required void Function(Dash0Span span) onEnd,
     int? startTimeUnixNano,
-  })  : startTimeUnixNano = startTimeUnixNano ?? nowNanos(),
+  })  : _name = name,
+        startTimeUnixNano = startTimeUnixNano ?? nowNanos(),
         _onEnd = onEnd;
 
-  final String name;
+  String _name;
+  String get name => _name;
+
+  /// Renames the span. Has no effect once the span has ended.
+  void updateName(String name) {
+    if (!isEnded) _name = name;
+  }
+
   final String traceId;
   final String spanId;
   final String? parentSpanId;
