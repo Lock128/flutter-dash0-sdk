@@ -54,4 +54,19 @@ void main() {
     expect(headers['traceparent'], '00-$traceId-$spanId-01');
     expect(headers['X-Amzn-Trace-Id'], contains('Parent=$spanId'));
   });
+
+  test('propagator match accepts strings and regular expressions', () {
+    final propagators = [
+      Dash0Propagator.traceparent(['api.example.com', RegExp(r'\.internal/')]),
+    ];
+    expect(
+      determinePropagatorTypes(propagators, 'https://api.example.com/x'),
+      [Dash0PropagatorType.traceparent],
+    );
+    expect(
+      determinePropagatorTypes(propagators, 'https://a.internal/x'),
+      [Dash0PropagatorType.traceparent],
+    );
+    expect(determinePropagatorTypes(propagators, 'https://other.io'), isEmpty);
+  });
 }

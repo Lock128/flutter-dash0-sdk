@@ -47,6 +47,7 @@ export 'src/options.dart'
         Dash0PropagatorType,
         Dash0RageClickOptions,
         Dash0ReplayOptions,
+        Dash0VcsAttributes,
         Dash0VitalsOptions,
         UrlScrubber;
 export 'src/otlp.dart' show Attributes;

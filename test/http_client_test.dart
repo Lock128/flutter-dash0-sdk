@@ -42,7 +42,7 @@ void main() {
       MockClient((r) async => http.Response('hello', 200)),
     );
     final response =
-        await http1.get(Uri.parse('https://api.example.com/a?b=1'));
+        await http1.get(Uri.parse('https://api.example.com/a?b=1#frag'));
     await client.flush();
 
     expect(response.body, 'hello');
@@ -51,10 +51,11 @@ void main() {
     expect(span['kind'], 3);
     expect(attr(span, 'http.request.method'), 'GET');
     expect(attr(span, 'http.response.status_code'), '200');
-    expect(attr(span, 'url.full'), 'https://api.example.com/a?b=1');
+    expect(attr(span, 'url.full'), 'https://api.example.com/a?b=1#frag');
+    expect(attr(span, 'url.fragment'), 'frag');
     expect(attr(span, 'url.domain'), 'api.example.com');
     expect(attr(span, 'url.path'), '/a');
-    expect(attr(span, 'url.query'), '?b=1');
+    expect(attr(span, 'url.query'), 'b=1');
     expect((span['status']! as Map)['code'], 0);
   });
 

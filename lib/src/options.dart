@@ -98,11 +98,14 @@ class Dash0Propagator {
   const Dash0Propagator({required this.type, required this.match});
 
   /// Shorthand for a W3C `traceparent` propagator.
-  const Dash0Propagator.traceparent(List<RegExp> match)
+  const Dash0Propagator.traceparent(List<Pattern> match)
       : this(type: Dash0PropagatorType.traceparent, match: match);
 
   final Dash0PropagatorType type;
-  final List<RegExp> match;
+
+  /// URLs to send the header to. A [RegExp] is tested against the URL, a
+  /// [String] matches when the URL contains it.
+  final List<Pattern> match;
 }
 
 /// Metadata for a page view.
@@ -289,6 +292,28 @@ class Dash0ProfilingOptions {
   }
 }
 
+/// Version control attributes sent as `vcs.*` resource attributes.
+class Dash0VcsAttributes {
+  const Dash0VcsAttributes({
+    this.providerName,
+    this.ownerName,
+    this.repositoryName,
+    this.repositoryUrlFull,
+    this.refHeadName,
+    this.refHeadRevision,
+    this.changeId,
+  });
+
+  /// `github`, `gitlab` or `bitbucket`.
+  final String? providerName;
+  final String? ownerName;
+  final String? repositoryName;
+  final String? repositoryUrlFull;
+  final String? refHeadName;
+  final String? refHeadRevision;
+  final String? changeId;
+}
+
 /// Options for `Dash0.init`.
 class Dash0Options {
   const Dash0Options({
@@ -300,6 +325,9 @@ class Dash0Options {
     this.environment,
     this.deploymentName,
     this.deploymentId,
+    this.vcs,
+    this.disableVcsDetection = false,
+    this.storageNamespace,
     this.resourceAttributes = const {},
     this.additionalSignalAttributes = const {},
     this.rejectSuspiciousServiceName = true,
@@ -352,6 +380,17 @@ class Dash0Options {
   final String? deploymentName;
   final String? deploymentId;
 
+  /// Version control attributes. Fields left null are detected from the
+  /// `--dart-define` values `DASH0_VCS_*` unless [disableVcsDetection] is set.
+  final Dash0VcsAttributes? vcs;
+
+  /// Skips reading `DASH0_VCS_*` from the build. Values in [vcs] still apply.
+  final bool disableVcsDetection;
+
+  /// Prefix for the keys the SDK persists, e.g. `docs` stores the session
+  /// under `docs:d0_session`. Blank means no prefix.
+  final String? storageNamespace;
+
   /// Extra resource attributes, e.g. `app.version` or `device.model.name`.
   final Map<String, Object?> resourceAttributes;
 
@@ -380,11 +419,13 @@ class Dash0Options {
   /// rules no trace headers are sent.
   final List<Dash0Propagator> propagators;
 
-  /// Requests to matching URLs are not instrumented.
-  final List<RegExp> ignoreUrls;
+  /// Requests to matching URLs are not instrumented. A [String] matches when
+  /// the URL contains it, a [RegExp] is tested against the URL.
+  final List<Pattern> ignoreUrls;
 
-  /// Errors with a matching message are not reported.
-  final List<RegExp> ignoreErrorMessages;
+  /// Errors with a matching message are not reported. A [String] matches when
+  /// the message contains it.
+  final List<Pattern> ignoreErrorMessages;
 
   /// Request and response headers matching any expression are captured as
   /// span attributes.

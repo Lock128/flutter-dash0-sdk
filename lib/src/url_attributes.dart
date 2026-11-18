@@ -29,7 +29,7 @@ Map<String, Object?> urlAttributes(String url, UrlScrubber? scrubber) {
   if (uri.hasScheme) attrs[sc.urlScheme] = uri.scheme;
   if (uri.host.isNotEmpty) attrs[sc.urlDomain] = uri.host;
   if (uri.path.isNotEmpty) attrs[sc.urlPath] = uri.path;
-  if (uri.hasQuery) attrs[sc.urlQuery] = '?${uri.query}';
-  if (uri.hasFragment) attrs[sc.urlFragment] = '#${uri.fragment}';
+  if (uri.hasQuery) attrs[sc.urlQuery] = uri.query;
+  if (uri.hasFragment) attrs[sc.urlFragment] = uri.fragment;
   return attrs;
 }

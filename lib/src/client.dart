@@ -27,6 +27,7 @@ import 'session.dart';
 import 'span.dart';
 import 'transport.dart';
 import 'url_attributes.dart';
+import 'vcs.dart';
 
 /// Version reported as `telemetry.sdk.version`.
 const dash0SdkVersion = '0.8.0';
@@ -46,7 +47,9 @@ class Dash0Client with WidgetsBindingObserver {
     int Function()? nowMillis,
     Dash0ClientInfo? clientInfo,
     ViewportProbe? Function()? viewportProbe,
-  })  : _sessionId = sessionId,
+    Map<String, String> buildEnvironment = const {},
+  })  : _buildEnvironment = buildEnvironment,
+        _sessionId = sessionId,
         _clock = nowMillis ?? (() => DateTime.now().millisecondsSinceEpoch),
         _sampled = isSessionSampledIn(sessionId, options.sessionSamplingRate),
         clientInfo = clientInfo ??
@@ -85,6 +88,7 @@ class Dash0Client with WidgetsBindingObserver {
     int Function()? nowMillis,
     Dash0ClientInfo? clientInfo,
     ViewportProbe? Function()? viewportProbe,
+    Map<String, String> buildEnvironment = dash0BuildEnvironment,
   }) async {
     options.validate();
     setDash0Debug(options.debug);
@@ -105,6 +109,7 @@ class Dash0Client with WidgetsBindingObserver {
       terminationTimeout: options.sessionTerminationTimeout,
       nowMillis: nowMillis,
       ephemeral: ephemeral,
+      storageNamespace: options.storageNamespace,
     );
     String sessionId;
     try {
@@ -130,6 +135,7 @@ class Dash0Client with WidgetsBindingObserver {
       nowMillis: nowMillis,
       clientInfo: clientInfo,
       viewportProbe: viewportProbe,
+      buildEnvironment: buildEnvironment,
     );
     if (observeLifecycle && options.isEnabled(Dash0Instrumentation.lifecycle)) {
       WidgetsBinding.instance.addObserver(client);
@@ -171,6 +177,7 @@ class Dash0Client with WidgetsBindingObserver {
   Dash0Names get names =>
       options.legacyAppNames ? Dash0Names.legacy : Dash0Names.web;
   final IgnoreRules ignoreRules;
+  final Map<String, String> _buildEnvironment;
 
   /// Client type (web desktop, web mobile, ios, android, ...) of this run.
   final Dash0ClientInfo clientInfo;
@@ -365,9 +372,13 @@ class Dash0Client with WidgetsBindingObserver {
       sc.serviceName: o.effectiveServiceName,
       sc.serviceNamespace: o.serviceNamespace,
       sc.serviceVersion: o.serviceVersion,
-      sc.deploymentEnvironmentName: o.environment,
-      sc.deploymentName: o.deploymentName,
-      sc.deploymentId: o.deploymentId,
+      sc.deploymentEnvironmentName:
+          o.environment ?? buildEnv(_buildEnvironment, 'DASH0_ENVIRONMENT'),
+      sc.deploymentName: o.deploymentName ??
+          buildEnv(_buildEnvironment, 'DASH0_DEPLOYMENT_NAME'),
+      sc.deploymentId:
+          o.deploymentId ?? buildEnv(_buildEnvironment, 'DASH0_DEPLOYMENT_ID'),
+      ...resolveVcsAttributes(o, _buildEnvironment),
       sc.telemetrySdkName: names.sdkName,
       sc.telemetrySdkLanguage: 'dart',
       sc.telemetrySdkVersion: dash0SdkVersion,
