@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 
 import 'batcher.dart';
 import 'client_info.dart';
+import 'client_probe.dart' show probeViewport;
 import 'debug.dart';
 import 'ids.dart';
 import 'ignore_rules.dart';
@@ -28,7 +29,7 @@ import 'transport.dart';
 import 'url_attributes.dart';
 
 /// Version reported as `telemetry.sdk.version`.
-const dash0SdkVersion = '0.7.0';
+const dash0SdkVersion = '0.8.0';
 
 /// Legacy scope name, reported with `Dash0Options.legacyAppNames`.
 const dash0ScopeName = 'dash0-flutter-sdk';
@@ -44,12 +45,16 @@ class Dash0Client with WidgetsBindingObserver {
     String sessionId, {
     int Function()? nowMillis,
     Dash0ClientInfo? clientInfo,
+    ViewportProbe? Function()? viewportProbe,
   })  : _sessionId = sessionId,
         _clock = nowMillis ?? (() => DateTime.now().millisecondsSinceEpoch),
         _sampled = isSessionSampledIn(sessionId, options.sessionSamplingRate),
         clientInfo = clientInfo ??
             detectClientInfo(collectUserAgent: options.collectUserAgent),
-        appInstanceId = generateUniqueId(appInstanceIdBytes) {
+        appInstanceId = generateUniqueId(appInstanceIdBytes),
+        pageLoadId = generateUniqueId(pageLoadIdBytes),
+        tabId = generateUniqueId(tabIdBytes),
+        _viewportProbe = viewportProbe ?? probeViewport {
     _logBatcher = Batcher<Map<String, Object?>>(
       _sendLogs,
       maxQueueSize: options.batchSize,
@@ -79,6 +84,7 @@ class Dash0Client with WidgetsBindingObserver {
     bool installUiInstrumentation = true,
     int Function()? nowMillis,
     Dash0ClientInfo? clientInfo,
+    ViewportProbe? Function()? viewportProbe,
   }) async {
     options.validate();
     setDash0Debug(options.debug);
@@ -123,6 +129,7 @@ class Dash0Client with WidgetsBindingObserver {
       sessionId,
       nowMillis: nowMillis,
       clientInfo: clientInfo,
+      viewportProbe: viewportProbe,
     );
     if (observeLifecycle && options.isEnabled(Dash0Instrumentation.lifecycle)) {
       WidgetsBinding.instance.addObserver(client);
@@ -154,6 +161,7 @@ class Dash0Client with WidgetsBindingObserver {
       }
     }
     dash0Debug('Initialized', 'session=$sessionId sampled=${client._sampled}');
+    client._debugUserAgent();
     return client;
   }
 
@@ -169,6 +177,15 @@ class Dash0Client with WidgetsBindingObserver {
 
   /// Random id of this app launch, the equivalent of the browser tab id.
   final String appInstanceId;
+
+  /// Random id of this page load (web only), `page.load.id`.
+  final String pageLoadId;
+
+  /// Random id of this browser tab (web only), `browser.tab.id`. A Flutter
+  /// web app runs once per tab, so it is generated once per client.
+  final String tabId;
+
+  final ViewportProbe? Function() _viewportProbe;
 
   final Dash0Transport _transport;
   final SessionManager _session;
@@ -283,10 +300,62 @@ class Dash0Client with WidgetsBindingObserver {
     }
   }
 
-  /// The resource sent with all telemetry.
+  /// The resource sent with metrics.
   Map<String, Object?> get resource => {
         'attributes': encodeAttributes(buildResourceAttributes()),
       };
+
+  /// The resource sent with logs and spans. Like [resource], plus
+  /// `user_agent.original` with `Dash0Options.userAgentOnResource`.
+  Map<String, Object?> get signalResource {
+    final ua = clientInfo.userAgent;
+    if (!options.userAgentOnResource ||
+        !options.collectUserAgent ||
+        !clientInfo.isWeb ||
+        ua == null) {
+      return resource;
+    }
+    return {
+      'attributes': encodeAttributes({
+        ...buildResourceAttributes(),
+        sc.userAgentOriginal: ua,
+      }),
+    };
+  }
+
+  /// The user agent for native apps, or null.
+  String? get _syntheticUserAgent {
+    if (!options.syntheticUserAgent || clientInfo.isWeb) return null;
+    final attrs = options.resourceAttributes;
+    String? str(String key) {
+      final v = attrs[key];
+      return v == null ? null : '$v';
+    }
+
+    return buildSyntheticUserAgent(
+      service: options.effectiveServiceName,
+      serviceVersion: options.serviceVersion,
+      osName: clientInfo.osName,
+      osVersion: str('os.version'),
+      device: str('device.model.identifier') ?? str('device.model.name'),
+    );
+  }
+
+  void _debugUserAgent() {
+    try {
+      if (!options.debug) return;
+      final attached = options.collectUserAgent &&
+          (clientInfo.userAgent != null || _syntheticUserAgent != null);
+      dash0Debug(
+        'Client',
+        'type=${clientInfo.type.value} '
+            'user_agent.original=${attached ? 'attached' : 'not attached'}'
+            '${attached ? ' length=${(clientInfo.userAgent ?? _syntheticUserAgent)!.length}' : ''}',
+      );
+    } catch (_) {
+      // Telemetry must never throw into the app.
+    }
+  }
 
   /// Resource attributes. Overridable keys from options are applied last.
   Attributes buildResourceAttributes() {
@@ -354,10 +423,31 @@ class Dash0Client with WidgetsBindingObserver {
         sc.appInstanceId: appInstanceId,
         ...clientInfo.signalAttributes(
           includeUserAgent: options.collectUserAgent,
+          syntheticUserAgent: _syntheticUserAgent,
         ),
+        if (clientInfo.isWeb) ..._webAttributes(),
         if (currentScreen != null) sc.appScreenName: currentScreen,
         ...pageUrlAttributes(),
       };
+
+  /// Attributes dash0-sdk-web adds to every signal. Web only.
+  Attributes _webAttributes() {
+    ViewportProbe? viewport;
+    try {
+      viewport = _viewportProbe();
+    } catch (_) {
+      viewport = null;
+    }
+    return {
+      sc.pageLoadId: pageLoadId,
+      sc.browserTabId: tabId,
+      if (viewport?.width != null) sc.browserWindowWidth: viewport!.width,
+      if (viewport?.height != null) sc.browserWindowHeight: viewport!.height,
+      if (viewport?.connectionType != null &&
+          viewport!.connectionType!.isNotEmpty)
+        sc.networkConnectionSubtype: viewport.connectionType,
+    };
+  }
 
   /// `page.url.*` attributes for the current screen, as `app://<screen>`.
   Attributes pageUrlAttributes() {
@@ -678,7 +768,7 @@ class Dash0Client with WidgetsBindingObserver {
     _dispatch('/v1/logs', {
       'resourceLogs': [
         {
-          'resource': resource,
+          'resource': signalResource,
           'scopeLogs': [
             {
               'scope': _scope,
@@ -694,7 +784,7 @@ class Dash0Client with WidgetsBindingObserver {
     _dispatch('/v1/traces', {
       'resourceSpans': [
         {
-          'resource': resource,
+          'resource': signalResource,
           'scopeSpans': [
             {
               'scope': _scope,

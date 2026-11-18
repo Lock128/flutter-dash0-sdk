@@ -23,6 +23,12 @@ const browserMobile = 'browser.mobile';
 const browserPlatform = 'browser.platform';
 const browserBrands = 'browser.brands';
 const userAgentOriginal = 'user_agent.original';
+const appClientUserAgentSynthetic = 'app.client.user_agent.synthetic';
+const pageLoadId = 'page.load.id';
+const browserTabId = 'browser.tab.id';
+const browserWindowWidth = 'browser.window.width';
+const browserWindowHeight = 'browser.window.height';
+const networkConnectionSubtype = 'network.connection.subtype';
 
 // Misc signal attributes
 const eventName = 'event.name';

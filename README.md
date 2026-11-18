@@ -553,7 +553,11 @@ native apps.
 | `app.runtime` | resource | `flutter-web`, `flutter-native` |
 | `os.name` | resource | `iOS`, `Android`, `macOS`, `Windows`, `Linux`, `ChromeOS`, `Fuchsia` |
 | `browser.mobile`, `browser.platform`, `browser.brands` | resource, web only | `true`/`false`, the OS name, brand names such as `Chromium` (only with `navigator.userAgentData`) |
-| `user_agent.original` | events, spans, logs, web only | the browser user agent, like dash0-sdk-web |
+| `user_agent.original` | events, spans, logs, web only | the browser user agent, like dash0-sdk-web (`undefined` when the browser has none) |
+| `page.load.id` | events, spans, logs, web only | random id, once per client (page load) |
+| `browser.tab.id` | events, spans, logs, web only | random id, once per client. A Flutter web app runs once per tab, so this is one id per tab |
+| `browser.window.width`, `browser.window.height` | events, spans, logs, web only | `window.innerWidth` and `innerHeight` when the signal is recorded |
+| `network.connection.subtype` | events, spans, logs, web only | `navigator.connection.effectiveType` (`4g`, `3g`, ...), only when the browser has it |
 
 `web-mobile` covers phones and tablets in a browser. It is decided by `navigator.userAgentData.mobile` when the browser
 has it, otherwise by the user agent (`Android|iPhone|iPad|iPod|Mobile`). iPadOS Safari in desktop mode sends a Mac user
@@ -567,6 +571,25 @@ Values from `resourceAttributes` replace the detected ones.
 `user_agent.original` can identify individual browsers. Set `collectUserAgent: false` to leave it out. The other
 attributes stay, and none of them is high cardinality. Dash0's browser and device breakdowns for websites may rely on
 the user agent, so turn it off only when policy requires.
+
+`userAgentOnResource: true` additionally puts `user_agent.original` on the resource of logs and spans (web only, never
+metrics). dash0-sdk-web sends it on signals only, so this is a diagnostic hedge in case Dash0 reads the user agent from
+the resource.
+
+`syntheticUserAgent: true` is for native apps, which have no browser user agent. It sends
+`<service.name>/<service.version> (<os.name> <os.version>; <device>)` as `user_agent.original` on events, spans and
+logs, plus `app.client.user_agent.synthetic=true`. `os.version` and the device come from `resourceAttributes`
+(`os.version`, `device.model.identifier` or `device.model.name`); missing parts are left out. This is a hack: Dash0 may
+parse the string imperfectly. It is never used on the web and needs `collectUserAgent`.
+
+### Sessions table shows empty System and Browser
+
+Dash0 fills these columns from `user_agent.original`. To check what the app sends, open the browser dev tools, Network
+tab, filter for `v1/logs`, and look at the request payload (the gzipped body is shown decoded in the Preview tab). Each
+`logRecords[].attributes` entry should contain `user_agent.original`. If it is missing, check that the deployed build
+uses SDK 0.6.0 or newer (`telemetry.sdk.version` in the resource), and that `collectUserAgent` is not `false`. Set
+`debug: true` to log whether the user agent is attached. If the attribute is present, try `userAgentOnResource: true`.
+Sessions that started before the upgrade keep empty columns.
 
 ## Security note
 
