@@ -277,5 +277,87 @@ void main() {
       expect(attr(transport.logs.single, 'app.client.user_agent.synthetic'),
           isNull);
     });
+
+    test('sanitizes every part', () {
+      final ua = buildSyntheticUserAgent(
+        service: 'my (app);x',
+        serviceVersion: '1.0\n2',
+        osName: 'i\u0000OS',
+        osVersion: '17; (evil)',
+        device: 'a' * 100,
+      );
+      expect(ua, 'my app x/1.0 2 (i OS 17 evil; ${'a' * 64})');
+      expect(ua.contains(RegExp(r'[\u0000-\u001f]')), false);
+      expect(';'.allMatches(ua).length, 1);
+      expect('('.allMatches(ua).length, 1);
+      expect(')'.allMatches(ua).length, 1);
+      expect(
+          buildSyntheticUserAgent(service: 'a', osName: '();', device: ' '),
+          'a');
+    });
+
+    test('os.name from resourceAttributes overrides the platform name',
+        () async {
+      final (client, transport) = await _start(
+        ios,
+        syntheticUserAgent: true,
+        resourceAttributes: const {
+          'os.name': 'iPadOS',
+          'os.version': '17.2',
+          'device.model.identifier': 'iPad13,1',
+        },
+      );
+      client.sendEvent('a');
+      await client.flush();
+      expect(attr(transport.logs.single, 'user_agent.original'),
+          'my-app/1.2.3 (iPadOS 17.2; iPad13,1)');
+      final r = _resource(transport, '/v1/logs', 'resourceLogs');
+      final a = {
+        for (final e in r['attributes']! as List)
+          (e as Map)['key']: (e['value'] as Map).values.first
+      };
+      expect(a['os.name'], 'iPadOS');
+    });
+
+    for (final (platform, type, osName, osType) in [
+      (TargetPlatform.iOS, 'ios', 'iOS', 'iOS'),
+      (TargetPlatform.android, 'android', 'Android', 'android'),
+    ]) {
+      test('native $type resource and signals', () async {
+        debugDefaultTargetPlatformOverride = platform;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
+        final (client, transport) = await _start(
+          classifyClient(isWeb: false, platform: platform),
+          syntheticUserAgent: true,
+          resourceAttributes: const {'os.version': '14'},
+        );
+        client.sendEvent('a');
+        await client.flush();
+        final r = _resource(transport, '/v1/logs', 'resourceLogs');
+        final a = {
+          for (final e in r['attributes']! as List)
+            (e as Map)['key']: (e['value'] as Map).values.first
+        };
+        expect(a['app.client.type'], type);
+        expect(a['app.runtime'], 'flutter-native');
+        expect(a['os.name'], osName);
+        expect(a['os.type'], osType);
+        expect(a.containsKey('user_agent.original'), false);
+        expect(a.containsKey('app.client.user_agent.synthetic'), false);
+        expect(attr(transport.logs.single, 'app.client.type'), type);
+        expect(attr(transport.logs.single, 'user_agent.original'),
+            'my-app/1.2.3 ($osName 14)');
+        expect(attr(transport.logs.single, 'app.client.user_agent.synthetic'),
+            true);
+      });
+    }
+
+    test('no user_agent.original on native without syntheticUserAgent',
+        () async {
+      final (client, transport) = await _start(ios);
+      client.sendEvent('a');
+      await client.flush();
+      expect(attr(transport.logs.single, 'user_agent.original'), isNull);
+    });
   });
 }

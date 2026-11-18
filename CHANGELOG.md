@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0
+
+Native iOS and Android telemetry fixes.
+
+- `syntheticUserAgent` uses `os.name` from `resourceAttributes` when set (for example `iPadOS`) instead of the detected platform name.
+- The synthetic user agent is sanitized: control characters, parentheses and semicolons are removed, whitespace is collapsed and each part is capped at 64 characters, so the result is always well formed.
+- Document which attributes native apps send (README, "Native apps (iOS, Android)").
+
 ## 0.9.0
 
 Closes the gaps to dash0-sdk-web 0.35.1 that make sense on Flutter. See `docs/web-sdk-gap-analysis.md`.
