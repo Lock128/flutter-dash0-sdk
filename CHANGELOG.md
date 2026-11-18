@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.9.0
+
+Closes the gaps to dash0-sdk-web 0.35.1 that make sense on Flutter. See `docs/web-sdk-gap-analysis.md`.
+
+Resource and options (read from the web SDK source):
+
+- Add `vcs.*` resource attributes: `Dash0VcsAttributes`, `Dash0Options.vcs`, `Dash0Options.disableVcsDetection` and detection from `--dart-define` values `DASH0_VCS_PROVIDER_NAME`, `DASH0_VCS_OWNER_NAME`, `DASH0_VCS_REPOSITORY_NAME`, `DASH0_VCS_REPOSITORY_URL_FULL`, `DASH0_VCS_REF_HEAD_NAME`, `DASH0_VCS_REF_HEAD_REVISION` and `DASH0_VCS_CHANGE_ID`. Provider, owner and repository are derived from the repository URL.
+- Fall back to `--dart-define` values `DASH0_ENVIRONMENT`, `DASH0_DEPLOYMENT_NAME` and `DASH0_DEPLOYMENT_ID` when `environment`, `deploymentName` or `deploymentId` are null.
+- Add `Dash0Options.storageNamespace`, a prefix for persisted keys (`<namespace>:d0_session`).
+- `ignoreUrls`, `ignoreErrorMessages` and `Dash0Propagator.match` accept `List<Pattern>`, so plain strings work next to `RegExp`. Strings are trimmed and empty ones dropped.
+- Fix: `url.query` and `url.fragment` no longer start with `?` and `#`.
+
+New behavior (read from the web SDK source, Dash0 UI display is a guess):
+
+- Add the opt-in `Dash0Instrumentation.console` with `Dash0ConsoleOptions` (`ignoreMessages`, `maxMessageLength` 4096, `captureDebugPrint`, `capturePrint`). It sends `browser.console` events (`app.console` with `legacyAppNames`) with `dash0.web.console.method` for `debugPrint`, for `print` inside `Dash0.runGuarded` and for the new `Dash0.log(level, message, {error, stackTrace})`. Messages are scrubbed, cut with `…`, rate limited before formatting (5000 per 10 minutes, 200 per 10 seconds) and before sending (1000 per 10 minutes, 50 per 10 seconds, separate from the shared budget). The SDK's own debug output is not captured. Export `Dash0ConsoleLevel`.
+- Add `Dash0.setParentTraceContext(traceparent)`: spans without a parent join the given trace and get its span id as `parentSpanId`. Null clears it, invalid values are ignored.
+- Add `Dash0.startView(name, {url, attributes})`: a virtual `browser.page_view` without `change_state` and without changing the current screen. The `url` override feeds `page.url.*`. `trackScreen` stays for compatibility.
+- Errors: `exception.message` is cut to 300 characters and `exception.component_stack` to 2048, both after URL scrubbing.
+- Add `Dash0Options.ignoreCrossOriginScriptErrors` and `ignoreBrowserExtensionErrors` (both default true), which drop `Script error.` and errors whose URL frames all belong to browser extensions. Only Flutter web stacks can match.
+- Aborted requests (`RequestAbortedException` of `package:http` 1.5) get `dash0.web.request.cancelled=true` and no error status or `error.type`.
+- Flutter web: requests to the page origin always get `traceparent` plus every configured propagator type, like the web SDK. Native apps are unchanged.
+
+Docs:
+
+- README: new options, dart-define examples, console capture, `startView`, `setParentTraceContext` and the list of web SDK features that do not apply to Flutter.
+- Add `docs/web-sdk-gap-analysis.md`.
+- No Dash0 MCP server was available, so nothing here was checked against a live dataset.
+- `publish_to: none` is unchanged.
+
 ## 0.8.0
 
 - Web: add the attributes dash0-sdk-web puts on every signal: `page.load.id`, `browser.tab.id`, `browser.window.width`, `browser.window.height` (read when the signal is recorded) and `network.connection.subtype` (`navigator.connection.effectiveType`, when the browser has it). Events, spans and logs only, never metrics. Not sent on native.

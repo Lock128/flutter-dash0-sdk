@@ -11,6 +11,8 @@ import '../url_attributes.dart';
 
 const _maxErrorsToReport = 100;
 const _maxStackFrames = 30;
+const _maxMessageLength = 300;
+const _maxComponentStackLength = 2048;
 const _dedupeWindow = Duration(seconds: 1);
 
 final RegExp _urlInFrame = RegExp(r'[a-zA-Z][a-zA-Z0-9+.-]*://[^\s()]+');
@@ -117,7 +119,7 @@ class ErrorInstrumentation {
     if (!_client.isEnabled || !_client.isSessionSampled) return;
     final message = error.toString();
     if (message.isEmpty || _reported >= _maxErrorsToReport) return;
-    if (_client.ignoreRules.isErrorIgnored(message)) {
+    if (_client.ignoreRules.isErrorIgnored(message, stackTrace?.toString())) {
       dash0Debug('Error matches an ignore rule. Will not send it.', message);
       return;
     }
@@ -136,22 +138,32 @@ class ErrorInstrumentation {
     _recent[key] = now;
     _reported++;
 
+    final scrubbed = _cut(_scrubUrls(message), _maxMessageLength);
+
     _client.emitEvent(
       _client.names.error,
       severity: Dash0Severity.error,
-      data: message,
+      data: scrubbed,
       attributes: {
         sc.exceptionType: type,
-        sc.exceptionMessage: message,
+        sc.exceptionMessage: scrubbed,
         if (stack.isNotEmpty)
           sc.exceptionStacktrace: sanitizeStackTrace(
             stack,
             ignoreRules: _client.ignoreRules,
             scrubber: _client.options.urlScrubber,
           ),
-        if (componentStack != null) sc.errorComponentStack: componentStack,
+        if (componentStack != null)
+          sc.errorComponentStack:
+              _cut(_scrubUrls(componentStack), _maxComponentStackLength),
         ...attributes ?? const {},
       },
     );
   }
+
+  String _scrubUrls(String text) => text.replaceAllMapped(
+      _urlInFrame, (m) => scrubUrl(m[0]!, _client.options.urlScrubber));
+
+  String _cut(String text, int max) =>
+      text.length > max ? text.substring(0, max) : text;
 }

@@ -72,4 +72,17 @@ void main() {
     final m = SessionManager(store: MemoryStore(), ephemeral: true);
     expect(await m.start(), startsWith('01'));
   });
+
+  test('namespaces the storage key', () async {
+    final store = MemoryStore();
+    final id = await SessionManager(
+      store: store,
+      nowMillis: () => now,
+      storageNamespace: ' docs ',
+    ).start();
+    expect(await store.get('docs:d0_session'), startsWith('$id#'));
+    expect(await store.get(sessionStorageKey), isNull);
+    expect(namespacedKey('k', '  '), 'k');
+    expect(namespacedKey('k', null), 'k');
+  });
 }

@@ -64,4 +64,18 @@ void main() {
       expect(limiter.isExcessiveUsage(), isFalse);
     });
   });
+
+  test('strings match as trimmed substrings, empty strings are dropped', () {
+    final r = IgnoreRules(
+      ignoreUrls: ['  /health ', '', '   ', RegExp(r'\.png$')],
+      ignoreErrorMessages: ['  noisy '],
+    );
+    expect(r.ignoreUrls.length, 3 - 1);
+    expect(r.isUrlIgnored('https://a.io/health/x'), isTrue);
+    expect(r.isUrlIgnored('https://a.io/img.png'), isTrue);
+    expect(r.isUrlIgnored('https://a.io/Health'), isFalse);
+    expect(r.isUrlIgnored('https://a.io/ok'), isFalse);
+    expect(r.isErrorIgnored('a noisy error'), isTrue);
+    expect(r.isErrorIgnored('NOISY'), isFalse);
+  });
 }

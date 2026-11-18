@@ -42,6 +42,13 @@ class MemoryStore implements Dash0KeyValueStore {
 }
 
 const sessionStorageKey = 'd0_session';
+
+/// The storage key for [key], prefixed with [namespace] when it is not blank.
+String namespacedKey(String key, String? namespace) {
+  final ns = namespace?.trim() ?? '';
+  return ns.isEmpty ? key : '$ns:$key';
+}
+
 const _separator = '#';
 const _maxTimeout = Duration(hours: 24);
 
@@ -75,7 +82,9 @@ class SessionManager {
     Duration terminationTimeout = const Duration(hours: 6),
     int Function()? nowMillis,
     this.ephemeral = false,
+    String? storageNamespace,
   })  : _store = store,
+        _key = namespacedKey(sessionStorageKey, storageNamespace),
         inactivityTimeout =
             inactivityTimeout > _maxTimeout ? _maxTimeout : inactivityTimeout,
         terminationTimeout =
@@ -83,6 +92,7 @@ class SessionManager {
         _now = nowMillis ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final Dash0KeyValueStore _store;
+  final String _key;
   final Duration inactivityTimeout;
   final Duration terminationTimeout;
   final int Function() _now;
@@ -98,7 +108,7 @@ class SessionManager {
   /// Loads a valid stored session or creates a new one.
   Future<String> start() async {
     try {
-      var session = Dash0Session.parse(await _store.get(sessionStorageKey));
+      var session = Dash0Session.parse(await _store.get(_key));
       if (session != null && !_isValid(session)) session = null;
       if (session != null) {
         session.lastActivityTime = _now();
@@ -135,7 +145,7 @@ class SessionManager {
   /// Ends the session and starts a new one.
   Future<String> terminate() async {
     try {
-      await _store.remove(sessionStorageKey);
+      await _store.remove(_key);
     } catch (e) {
       dash0Debug('Failed to terminate session', e);
     }
@@ -159,7 +169,7 @@ class SessionManager {
 
   Future<void> _persist() async {
     try {
-      await _store.set(sessionStorageKey, _session!.serialize());
+      await _store.set(_key, _session!.serialize());
     } catch (e) {
       dash0Debug('Failed to persist session', e);
     }

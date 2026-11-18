@@ -54,4 +54,89 @@ void main() {
     expect(headers['traceparent'], '00-$traceId-$spanId-01');
     expect(headers['X-Amzn-Trace-Id'], contains('Parent=$spanId'));
   });
+
+  test('propagator match accepts strings and regular expressions', () {
+    final propagators = [
+      Dash0Propagator.traceparent(['api.example.com', RegExp(r'\.internal/')]),
+    ];
+    expect(
+      determinePropagatorTypes(propagators, 'https://api.example.com/x'),
+      [Dash0PropagatorType.traceparent],
+    );
+    expect(
+      determinePropagatorTypes(propagators, 'https://a.internal/x'),
+      [Dash0PropagatorType.traceparent],
+    );
+    expect(determinePropagatorTypes(propagators, 'https://other.io'), isEmpty);
+  });
+
+  group('same origin on web', () {
+    final propagators = [
+      Dash0Propagator(
+        type: Dash0PropagatorType.xray,
+        match: [RegExp(r'amazonaws\.com')],
+      ),
+    ];
+
+    test('adds traceparent and all configured types', () {
+      expect(
+        determinePropagatorTypes(
+          propagators,
+          'https://app.example.com/api/items',
+          pageOrigin: 'https://app.example.com',
+        ),
+        [Dash0PropagatorType.traceparent, Dash0PropagatorType.xray],
+      );
+    });
+
+    test('other origins use the match rules', () {
+      expect(
+        determinePropagatorTypes(
+          propagators,
+          'https://other.example.com/api',
+          pageOrigin: 'https://app.example.com',
+        ),
+        isEmpty,
+      );
+      expect(
+        determinePropagatorTypes(
+          propagators,
+          'http://app.example.com/api',
+          pageOrigin: 'https://app.example.com',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('default ports are the same origin', () {
+      expect(
+          originOf('https://App.example.com:443/x'), 'https://app.example.com');
+      expect(
+        determinePropagatorTypes(
+          const [],
+          'https://app.example.com:443/x',
+          pageOrigin: 'https://app.example.com',
+        ),
+        [Dash0PropagatorType.traceparent],
+      );
+    });
+
+    test('relative urls and other schemes get no same-origin headers', () {
+      expect(originOf('/api/items'), isNull);
+      expect(originOf('ftp://app.example.com/x'), isNull);
+      expect(
+        determinePropagatorTypes(
+          const [],
+          '/api/items',
+          pageOrigin: 'https://app.example.com',
+        ),
+        isEmpty,
+      );
+    });
+
+    test('without a page origin nothing changes', () {
+      expect(determinePropagatorTypes(const [], 'https://app.example.com/x'),
+          isEmpty);
+    });
+  });
 }

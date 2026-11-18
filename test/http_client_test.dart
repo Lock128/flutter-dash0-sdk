@@ -42,7 +42,7 @@ void main() {
       MockClient((r) async => http.Response('hello', 200)),
     );
     final response =
-        await http1.get(Uri.parse('https://api.example.com/a?b=1'));
+        await http1.get(Uri.parse('https://api.example.com/a?b=1#frag'));
     await client.flush();
 
     expect(response.body, 'hello');
@@ -51,10 +51,11 @@ void main() {
     expect(span['kind'], 3);
     expect(attr(span, 'http.request.method'), 'GET');
     expect(attr(span, 'http.response.status_code'), '200');
-    expect(attr(span, 'url.full'), 'https://api.example.com/a?b=1');
+    expect(attr(span, 'url.full'), 'https://api.example.com/a?b=1#frag');
+    expect(attr(span, 'url.fragment'), 'frag');
     expect(attr(span, 'url.domain'), 'api.example.com');
     expect(attr(span, 'url.path'), '/a');
-    expect(attr(span, 'url.query'), '?b=1');
+    expect(attr(span, 'url.query'), 'b=1');
     expect((span['status']! as Map)['code'], 0);
   });
 
@@ -196,4 +197,47 @@ void main() {
     expect(attr(span, 'http.request.method'), '_OTHER');
     expect(attr(span, 'http.request.method_original'), 'BREW');
   });
+
+  test('aborted requests are cancelled, not failed', () async {
+    final (client, transport) = await start();
+    final c = Dash0HttpClient(
+      client,
+      MockClient((r) async => throw RequestAbortedException()),
+    );
+    await expectLater(
+      c.get(Uri.parse('https://api.example.com/slow')),
+      throwsA(isA<RequestAbortedException>()),
+    );
+    await client.flush();
+    final span = transport.spans.single;
+    expect(attr(span, 'dash0.web.request.cancelled'), true);
+    expect(attr(span, 'error.type'), isNull);
+    expect((span['status']! as Map)['code'], 0);
+    final duration = transport.metrics
+        .firstWhere((m) => m['name'] == 'http.client.request.duration');
+    final point =
+        ((duration['histogram']! as Map)['dataPoints']! as List).single as Map;
+    expect(
+        (point['attributes']! as List)
+            .any((a) => (a as Map)['key'] == 'error.type'),
+        isFalse);
+  });
+
+  test('other failures still set the error status', () async {
+    final (client, transport) = await start();
+    final c = Dash0HttpClient(
+      client,
+      MockClient((r) async => throw StateError('boom')),
+    );
+    await expectLater(
+        c.get(Uri.parse('https://api.example.com/x')), throwsStateError);
+    await client.flush();
+    final span = transport.spans.single;
+    expect(attr(span, 'dash0.web.request.cancelled'), isNull);
+    expect(attr(span, 'error.type'), 'StateError');
+    expect((span['status']! as Map)['code'], 2);
+  });
 }
+
+/// Same name as the exception of package:http 1.5 for aborted requests.
+class RequestAbortedException implements Exception {}

@@ -21,6 +21,8 @@ package.
 - App lifecycle events (`app.lifecycle`).
 - Metrics, gzip compression, `dart:io` HTTP capture, web vitals equivalents, rage clicks, session replay and
   profiling (see the sections below).
+- Console capture (opt-in), `Dash0.startView`, `Dash0.setParentTraceContext`, `vcs.*` resource attributes and
+  build time deployment metadata through `--dart-define`.
 - Public API: `sendEvent`, `startSpan`, `trace`, `reportError`, `identify`, `addSignalAttribute`,
   `removeSignalAttribute`, `terminateSession`, `flush`, `shutdown` and a runtime `enabled` switch.
 
@@ -477,7 +479,87 @@ Known limits:
 `Dash0.init` hooks `FlutterError.onError` and `PlatformDispatcher.instance.onError` and still calls the handlers that
 were installed before. Identical errors within one second are reported once and at most 100 errors are sent per app
 run. Use `ignoreErrorMessages` to drop noisy errors and `Dash0.reportError(error, stackTrace: st)` for handled errors.
-Stack traces are limited to 30 frames and URLs in them pass through `urlScrubber`.
+Stack traces are limited to 30 frames and URLs in them pass through `urlScrubber`. `exception.message` is cut to 300
+characters and `exception.component_stack` to 2048, after URL scrubbing. `ignoreCrossOriginScriptErrors` and
+`ignoreBrowserExtensionErrors` (both default `true`) drop `Script error.` and errors whose stack frames all belong to
+browser extensions; they can only match on Flutter web.
+
+### Console capture
+
+Opt-in. List `Dash0Instrumentation.console` in `enabledInstrumentations` to send `browser.console` events
+(`app.console` with `legacyAppNames`):
+
+```dart
+await Dash0.init(Dash0Options(
+  serviceName: 'my-app',
+  endpoint: endpoint,
+  enabledInstrumentations: {
+    Dash0Instrumentation.navigation,
+    Dash0Instrumentation.error,
+    Dash0Instrumentation.http,
+    Dash0Instrumentation.lifecycle,
+    Dash0Instrumentation.metrics,
+    Dash0Instrumentation.console,
+  },
+  console: Dash0ConsoleOptions(ignoreMessages: ['noisy', RegExp(r'^token=')]),
+));
+
+Dash0.runGuarded(() => runApp(const MyApp())); // captures print in this zone
+Dash0.log(Dash0ConsoleLevel.warn, 'Cache miss', error: e, stackTrace: st);
+```
+
+- Warning: everything printed through these sources is uploaded to Dash0 and only URLs are scrubbed. Do not print
+  tokens or personal data, and add patterns such as `RegExp(r'token=|password')` to `ignoreMessages` to drop them.
+- Sources: `debugPrint` (the original is still called), `print` inside `Dash0.runGuarded` and `Dash0.log`.
+- Attributes: `dash0.web.console.method` (`log`, `info`, `warn`, `error`, `debug`, `trace`), the message as event body,
+  `exception.*` when `Dash0.log` gets an `error`, `code.stacktrace` for `trace`. Severity: `trace` and `debug` are
+  DEBUG, `log` and `info` INFO, `warn` WARN, `error` ERROR.
+- Messages pass through the URL scrubber and are cut at `maxMessageLength` (4096) with the character `…`.
+- Rate limits like the web SDK: beyond 5000 per 10 minutes or 200 per 10 seconds messages are dropped before they are
+  formatted, beyond 1000 per 10 minutes or 50 per 10 seconds they are not sent. This budget is separate from the
+  shared log budget.
+- The SDK's own debug output is never captured. Nothing is sent for sampled out sessions or a disabled client.
+- Anything else that calls `print` outside `Dash0.runGuarded` (including `Zone.root` prints) is not captured.
+
+Verified from the web SDK source: event shape, attributes, severity mapping, limits. A guess: how the Dash0 UI shows
+`browser.console` events.
+
+### Page views, parent trace context and storage
+
+- `Dash0.startView('Settings', url: '/settings', attributes: {...})` sends a virtual `browser.page_view` (type 1)
+  without `change_state`, without changing the current screen and without `generatePageViewMetadata`. `url`
+  overrides `page.url.*`: absolute http(s) and `app` URLs are used as is, anything else is a path on `app://`.
+  Attributes are added last and can override. `Dash0.trackScreen` stays for compatibility.
+- `Dash0.setParentTraceContext('00-<trace id>-<span id>-01')` makes spans without a parent (not started inside
+  `Dash0.trace`) join that trace and use the span id as `parentSpanId`, for example to continue a trace started by a
+  backend. `null` clears it, invalid values are ignored.
+- `storageNamespace: 'docs'` stores the session under `docs:d0_session`, which separates several Flutter web apps on
+  one origin.
+- On Flutter web, requests to the page origin always get `traceparent` plus every configured propagator type.
+  Aborted requests (`RequestAbortedException` of `package:http` 1.5) get `dash0.web.request.cancelled=true` and no
+  error status.
+
+### Build time metadata
+
+`environment`, `deploymentName`, `deploymentId` and the `vcs` fields are read from `--dart-define` when the option is
+null (set `disableVcsDetection: true` to skip `DASH0_VCS_*`):
+
+```sh
+flutter build web \
+  --dart-define-from-file=otlp_config.json \
+  --dart-define=DASH0_ENVIRONMENT=production \
+  --dart-define=DASH0_DEPLOYMENT_NAME=web \
+  --dart-define=DASH0_DEPLOYMENT_ID=$GITHUB_RUN_ID \
+  --dart-define=DASH0_VCS_REPOSITORY_URL_FULL=https://github.com/me/app \
+  --dart-define=DASH0_VCS_REF_HEAD_NAME=$GITHUB_REF_NAME \
+  --dart-define=DASH0_VCS_REF_HEAD_REVISION=$GITHUB_SHA
+```
+
+Also supported: `DASH0_VCS_PROVIDER_NAME`, `DASH0_VCS_OWNER_NAME`, `DASH0_VCS_REPOSITORY_NAME`,
+`DASH0_VCS_CHANGE_ID`. Provider, owner and repository name are derived from the repository URL when missing. They
+become the resource attributes `vcs.provider.name`, `vcs.owner.name`, `vcs.repository.name`,
+`vcs.repository.url.full`, `vcs.ref.head.name`, `vcs.ref.head.revision` and `vcs.change.id`. Verified from the web
+SDK source; which Dash0 views read them is a guess.
 
 ### Custom events, spans and users
 
@@ -514,13 +596,13 @@ await Dash0.shutdown(); // flush, restore error handlers, allow init again
 | `serviceNamespace`, `serviceVersion`, `environment`, `deploymentName`, `deploymentId` | none | Resource attributes (`deployment.environment.name` for `environment`). |
 | `resourceAttributes` | `{}` | Extra resource attributes, for example app build or device model. |
 | `additionalSignalAttributes` | `{}` | Attributes added to every signal. |
-| `enabledInstrumentations` | all | Subset of `navigation`, `error`, `http`, `lifecycle`, `metrics`. `httpOverrides` is opt-in: it is only active when listed explicitly. |
+| `enabledInstrumentations` | all | Subset of `navigation`, `error`, `http`, `lifecycle`, `metrics`. `httpOverrides`, `profiling` and `console` are opt-in: they are only active when listed explicitly. |
 | `sessionSamplingRate` | `100` | Percentage of sessions that send data, 0 to 100. Decided from the session id with CRC32. |
 | `sessionInactivityTimeout` | 3 hours | Maximum idle time between app starts or resumes. Capped at 24 hours. |
 | `sessionTerminationTimeout` | 6 hours | Maximum session age. Capped at 24 hours. |
 | `propagators` | `[]` | `Dash0Propagator(type, match)` rules for trace headers (`traceparent` or `xray`). |
-| `ignoreUrls` | `[]` | Requests to matching URLs are not traced. Also redacts them in stack traces. |
-| `ignoreErrorMessages` | `[]` | Errors with a matching message are not reported. |
+| `ignoreUrls` | `[]` | `List<Pattern>`: strings (substring) or `RegExp`. Requests to matching URLs are not traced. Also redacts them in stack traces. |
+| `ignoreErrorMessages` | `[]` | `List<Pattern>`. Errors with a matching message are not reported. |
 | `headersToCapture` | `[]` | Request and response headers whose names match are captured as span attributes. |
 | `urlScrubber` | none | Function applied to every URL attribute. Credentials in URLs are always redacted first. |
 | `screenNameResolver` | route name | Custom mapping from `Route` to screen name. |
@@ -531,6 +613,10 @@ await Dash0.shutdown(); // flush, restore error handlers, allow init again
 | `metricExportInterval` | 30 seconds | How often metrics are exported, at least 1 second. |
 | `metricTemporality` | `delta` | `Dash0AggregationTemporality.delta` or `cumulative`. |
 | `compression` | `gzip` | `Dash0Compression.gzip` or `none`. Bodies under 1 KiB are never compressed. |
+| `vcs`, `disableVcsDetection` | none, `false` | `Dash0VcsAttributes` for `vcs.*` resource attributes, detected from `DASH0_VCS_*` dart-defines when null. |
+| `storageNamespace` | none | Prefix for persisted keys, `<namespace>:d0_session`. |
+| `console` | `Dash0ConsoleOptions()` | `ignoreMessages`, `maxMessageLength` (4096), `captureDebugPrint`, `capturePrint`. Needs `Dash0Instrumentation.console`. |
+| `ignoreCrossOriginScriptErrors`, `ignoreBrowserExtensionErrors` | `true`, `true` | Drop `Script error.` and extension only stacks. Flutter web only in practice. |
 | `debug` | `false` | Print SDK diagnostics. |
 
 ## Sessions and resources
@@ -613,6 +699,21 @@ telemetry.
 | Rage clicks | `browser.rage_click` events |
 | Profiling | Long task / ANR detection, runtime gauges and `Dash0.profile` |
 | Transport compression | gzip (not on web) |
+| `console` wrapping | `debugPrint`, `print` in `Dash0.runGuarded` and `Dash0.log`, opt-in |
+| `startView`, `setParentTraceContext` | `Dash0.startView`, `Dash0.setParentTraceContext` |
+| `wrapEventHandlers`, `wrapTimers` | Not applicable: no JS event handler or timer wrapping in Dart |
+| Resource timing waits, `browser.navigation_timing` | Not applicable: no `PerformanceResourceTiming` or document load. See `app.start.duration` in `app.vitals` |
+| Page load trace context (meta tag, Server-Timing) | Not applicable, use `setParentTraceContext` |
+| History API virtual page views, script tag entry point, XHR | Not applicable |
+| `urlAttributeScrubber` (record of URL attributes) | `urlScrubber` works on the URL string |
+| Numbers sent as `doubleValue`, status code as string | Ints as `intValue`, status code as int (OTLP allows both, a guess that Dash0 accepts both) |
+
+The full comparison, with web SDK source paths for each row and what is verified or a guess, is in
+[docs/web-sdk-gap-analysis.md](docs/web-sdk-gap-analysis.md).
+
+## Publishing
+
+`pubspec.yaml` has `publish_to: none`, so `dart pub publish` refuses to run. Remove that line to publish to pub.dev.
 
 ## Development
 

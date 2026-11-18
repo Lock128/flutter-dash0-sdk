@@ -175,4 +175,98 @@ void main() {
       expect(result, isNot(contains('pw')));
     });
   });
+
+  test('cuts the message to 300 characters after scrubbing urls', () async {
+    final (client, transport) = await start();
+    client.reportError('a' * 400);
+    client.reportError('see https://user:pw@example.com/x');
+    await client.flush();
+    expect(attr(transport.logs[0], 'exception.message'), 'a' * 300);
+    expect(attr(transport.logs[1], 'exception.message'),
+        'see https://REDACTED:REDACTED@example.com/x');
+  });
+
+  test('scrubs and cuts the event body like the message attribute', () async {
+    final (client, transport) = await start();
+    client.reportError('see https://user:pw@example.com/x');
+    client.reportError('b' * 400);
+    await client.flush();
+    expect((transport.logs[0]['body']! as Map)['stringValue'],
+        'see https://REDACTED:REDACTED@example.com/x');
+    expect((transport.logs[1]['body']! as Map)['stringValue'], 'b' * 300);
+  });
+
+  test('cuts and scrubs the component stack', () async {
+    final (client, transport) = await start();
+    client.reportError('e1',
+        componentStack: 'https://u:p@example.com/a ${'b' * 3000}');
+    await client.flush();
+    final stack =
+        attr(transport.logs.single, 'exception.component_stack')! as String;
+    expect(stack.length, 2048);
+    expect(stack, startsWith('https://REDACTED:REDACTED@example.com/a '));
+  });
+
+  test('drops Script error. variants by default', () async {
+    final (client, transport) = await start();
+    client.reportError('Script error.');
+    client.reportError('Script error');
+    client.reportError('Javascript error: Script error. on line 0');
+    client.reportError('A Script error. happened');
+    await client.flush();
+    expect(transport.logs, hasLength(1));
+  });
+
+  test('keeps Script error. when ignoreCrossOriginScriptErrors is false',
+      () async {
+    final transport = FakeTransport();
+    final client = await Dash0Client.start(
+      const Dash0Options(
+        serviceName: 'test',
+        endpoint: testEndpoint,
+        batchSize: 1,
+        ignoreCrossOriginScriptErrors: false,
+      ),
+      transport: transport,
+      sessionStore: MemoryStore(),
+      installErrorHandlers: false,
+      observeLifecycle: false,
+    );
+    client.reportError('Script error.');
+    await client.flush();
+    expect(transport.logs, hasLength(1));
+  });
+
+  group('browser extension errors', () {
+    const extensionStack = 'TypeError: x\n'
+        '    at a (chrome-extension://abc/content.js:1:1)\n'
+        '    at b (moz-extension://abc/content.js:2:2)';
+    const mixedStack = 'TypeError: x\n'
+        '    at a (chrome-extension://abc/content.js:1:1)\n'
+        '    at b (https://example.com/main.dart.js:2:2)';
+
+    test('only extension frames are ignored', () {
+      final rules = IgnoreRules();
+      expect(rules.isErrorIgnored('TypeError: x', extensionStack), isTrue);
+      expect(rules.isErrorIgnored('TypeError: x', mixedStack), isFalse);
+      expect(rules.isErrorIgnored('TypeError: x', null), isFalse);
+      expect(rules.isErrorIgnored('TypeError: x', '#0 main (file.dart:1:1)'),
+          isFalse);
+    });
+
+    test('can be switched off', () {
+      final rules = IgnoreRules(ignoreBrowserExtensionErrors: false);
+      expect(rules.isErrorIgnored('TypeError: x', extensionStack), isFalse);
+    });
+
+    test('reportError drops them', () async {
+      final (client, transport) = await start();
+      client.reportError(StateError('x'),
+          stackTrace: StackTrace.fromString(extensionStack));
+      client.reportError(StateError('y'),
+          stackTrace: StackTrace.fromString(mixedStack));
+      await client.flush();
+      expect(transport.logs, hasLength(1));
+    });
+  });
 }

@@ -12,6 +12,8 @@ export 'src/client_info.dart'
 export 'src/client.dart' show Dash0Client, dash0SdkVersion;
 export 'src/dash0.dart' show Dash0;
 export 'src/ids.dart' show generateSpanId, generateTraceId, isSessionSampledIn;
+export 'src/instrumentation/console.dart'
+    show ConsoleInstrumentation, Dash0ConsoleLevel;
 export 'src/instrumentation/graphql.dart'
     show Dash0GraphQL, Dash0GraphQLErrors, Dash0GraphQLOperation;
 export 'src/instrumentation/http_client.dart' show Dash0HttpClient;
@@ -38,6 +40,7 @@ export 'src/options.dart'
     show
         Dash0AggregationTemporality,
         Dash0Compression,
+        Dash0ConsoleOptions,
         Dash0Endpoint,
         Dash0Instrumentation,
         Dash0Options,
@@ -47,6 +50,7 @@ export 'src/options.dart'
         Dash0PropagatorType,
         Dash0RageClickOptions,
         Dash0ReplayOptions,
+        Dash0VcsAttributes,
         Dash0VitalsOptions,
         UrlScrubber;
 export 'src/otlp.dart' show Attributes;
