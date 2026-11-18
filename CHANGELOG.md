@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+- Tell clients apart. Every event, span and log carries `app.client.type` (`web-desktop`, `web-mobile`, `ios`, `android`, `macos`, `windows`, `linux`, `fuchsia`). The resource, which also covers metrics, carries `app.client.type`, `app.runtime` (`flutter-web` or `flutter-native`) and `os.name`.
+- On the web the resource also has `browser.mobile`, `browser.platform` and, where the browser has `navigator.userAgentData`, `browser.brands`. Events, spans and logs have `user_agent.original` like dash0-sdk-web. Metrics never get the raw user agent.
+- Mobile web is detected with `navigator.userAgentData.mobile`, then the user agent (`Android|iPhone|iPad|iPod|Mobile`), and iPadOS Safari in desktop mode by its touch points. Tablets are `web-mobile`.
+- Add `Dash0Options.collectUserAgent` (default `true`) to leave out `user_agent.original`.
+- Export `Dash0ClientInfo`, `Dash0ClientType`, `WebProbe` and `classifyClient`, and expose `Dash0Client.clientInfo`.
+- `os.type` is unchanged (`web` or the Flutter platform name).
+
 ## 0.5.0
 
 - Add `Dash0TabObserver`, a widget that sends a page view (`/admin/failed-payments`) whenever the selected tab of a tab controller settles (any controller class, passed as `controller`, `index` and `isChanging`). Taps, `animateTo` and swipes are reported, mid animation changes and unchanged indexes are not. The first tab is reported as the parent route by default, because the route's own page view already covers it.
