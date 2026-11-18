@@ -320,6 +320,8 @@ class Dash0Options {
     this.batchSize = 15,
     this.batchDelay = const Duration(seconds: 1),
     this.collectUserAgent = true,
+    this.userAgentOnResource = false,
+    this.syntheticUserAgent = false,
     this.debug = false,
     this.enabled = true,
     this.metricExportInterval = const Duration(seconds: 30),
@@ -426,6 +428,19 @@ class Dash0Options {
   /// events, spans and logs, like dash0-sdk-web. Never added to metrics.
   /// `app.client.type` and the `browser.*` attributes are sent either way.
   final bool collectUserAgent;
+
+  /// Web only, needs [collectUserAgent]. Also adds `user_agent.original` to
+  /// the resource of logs and spans (never of metrics). A diagnostic hedge in
+  /// case Dash0 reads the user agent from the resource.
+  final bool userAgentOnResource;
+
+  /// Native apps only, needs [collectUserAgent]. Sends a made up user agent,
+  /// `<service.name>/<service.version> (<os.name> <os.version>; <device>)`,
+  /// as `user_agent.original` on events, spans and logs, together with
+  /// `app.client.user_agent.synthetic=true`. A hack so that Dash0 can fill
+  /// the System and Browser columns; Dash0 may parse it imperfectly. Never
+  /// used on the web, where the real user agent is sent.
+  final bool syntheticUserAgent;
 
   /// Print SDK diagnostics.
   final bool debug;

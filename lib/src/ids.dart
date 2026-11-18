@@ -9,6 +9,8 @@ const traceIdBytes = 16;
 const sessionIdBytes = 8;
 const appInstanceIdBytes = 8;
 const eventIdBytes = 8;
+const pageLoadIdBytes = 8;
+const tabIdBytes = 8;
 
 const _traceIdPrefix = 'd042';
 

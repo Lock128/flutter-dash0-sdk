@@ -81,7 +81,7 @@ void main() {
       final info = classifyClient(isWeb: true, probe: null);
       expect(info.type, Dash0ClientType.webDesktop);
       expect(info.osName, isNull);
-      expect(info.userAgent, isNull);
+      expect(info.userAgent, 'undefined', reason: 'web SDK NO_VALUE_FALLBACK');
     });
   });
 

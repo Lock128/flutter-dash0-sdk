@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.8.0
+
+- Web: add the attributes dash0-sdk-web puts on every signal: `page.load.id`, `browser.tab.id`, `browser.window.width`, `browser.window.height` (read when the signal is recorded) and `network.connection.subtype` (`navigator.connection.effectiveType`, when the browser has it). Events, spans and logs only, never metrics. Not sent on native.
+- Web: read `navigator.userAgent` independently of `navigator.userAgentData`, so a failing client hints read no longer drops `user_agent.original`. The probe reads through `@JS` getters and a testable `NavigatorSource`.
+- Web: send `user_agent.original: undefined` when the browser has no user agent, like dash0-sdk-web does.
+- Add `Dash0Options.userAgentOnResource` (default false): also put `user_agent.original` on the resource of logs and spans (web, never metrics). Diagnostic hedge.
+- Add `Dash0Options.syntheticUserAgent` (default false): native apps send `<service>/<version> (<os> <os.version>; <device>)` as `user_agent.original` plus `app.client.user_agent.synthetic=true`. A hack, never used on the web.
+- `debug: true` logs the client type and whether `user_agent.original` is attached, with its length.
+- Export `ViewportProbe`.
+
 ## 0.7.0
 
 - Name GraphQL operations. Spans get `graphql.operation.name` and `graphql.operation.type` and are called `HTTP POST <OperationName>`. `Dash0HttpClient` does this for JSON POST requests of `http.Request`.

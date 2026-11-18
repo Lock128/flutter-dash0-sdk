@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'client_probe.dart';
 import 'semantic_conventions.dart' as sc;
 
-export 'client_probe.dart' show WebProbe;
+export 'client_probe.dart' show ViewportProbe, WebProbe;
 
 /// Where the app runs. Reported as `app.client.type`.
 enum Dash0ClientType {
@@ -75,11 +75,48 @@ class Dash0ClientInfo {
       };
 
   /// Attributes for events, spans and logs. Metrics do not get these.
-  Map<String, Object?> signalAttributes({bool includeUserAgent = true}) => {
+  ///
+  /// [syntheticUserAgent] is used on native clients only, which have no
+  /// `userAgent`. It is marked with `app.client.user_agent.synthetic`.
+  Map<String, Object?> signalAttributes({
+    bool includeUserAgent = true,
+    String? syntheticUserAgent,
+  }) =>
+      {
         sc.appClientType: type.value,
         if (includeUserAgent && userAgent != null)
-          sc.userAgentOriginal: userAgent,
+          sc.userAgentOriginal: userAgent
+        else if (includeUserAgent && !isWeb && syntheticUserAgent != null) ...{
+          sc.userAgentOriginal: syntheticUserAgent,
+          sc.appClientUserAgentSynthetic: true,
+        },
       };
+}
+
+/// Value dash0-sdk-web uses when a browser value is missing.
+const webNoValueFallback = 'undefined';
+
+/// Builds `<service>/<version> (<os> <osVersion>; <device>)` for native
+/// apps, which have no browser user agent. Missing parts are left out.
+String buildSyntheticUserAgent({
+  required String service,
+  String? serviceVersion,
+  String? osName,
+  String? osVersion,
+  String? device,
+}) {
+  final product = serviceVersion == null || serviceVersion.isEmpty
+      ? service
+      : '$service/$serviceVersion';
+  final os = [
+    if (osName != null && osName.isNotEmpty) osName,
+    if (osVersion != null && osVersion.isNotEmpty) osVersion,
+  ].join(' ');
+  final comment = [
+    if (os.isNotEmpty) os,
+    if (device != null && device.isNotEmpty) device,
+  ].join('; ');
+  return comment.isEmpty ? product : '$product ($comment)';
 }
 
 final _mobileUa =
@@ -138,7 +175,10 @@ Dash0ClientInfo classifyClient({
     browserMobile: mobile,
     browserPlatform: os,
     browserBrands: brands,
-    userAgent: collectUserAgent && ua.isNotEmpty ? ua : null,
+    // dash0-sdk-web sends NO_VALUE_FALLBACK ("undefined") when the browser
+    // has no user agent.
+    userAgent:
+        collectUserAgent ? (ua.isNotEmpty ? ua : webNoValueFallback) : null,
   );
 }
 

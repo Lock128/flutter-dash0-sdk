@@ -24,5 +24,22 @@ class WebProbe {
   final int maxTouchPoints;
 }
 
+/// Window size and connection type, read at emission time.
+class ViewportProbe {
+  const ViewportProbe({this.width, this.height, this.connectionType});
+
+  /// `window.innerWidth`.
+  final int? width;
+
+  /// `window.innerHeight`.
+  final int? height;
+
+  /// `navigator.connection.effectiveType` (`4g`, `3g`, ...).
+  final String? connectionType;
+}
+
 /// Reads `navigator`. There is no browser here.
 WebProbe? probeWeb() => null;
+
+/// Reads the window size. There is no browser here.
+ViewportProbe? probeViewport() => null;

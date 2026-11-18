@@ -3,7 +3,12 @@ library;
 
 export 'src/batcher.dart' show Batcher;
 export 'src/client_info.dart'
-    show Dash0ClientInfo, Dash0ClientType, WebProbe, classifyClient;
+    show
+        Dash0ClientInfo,
+        Dash0ClientType,
+        ViewportProbe,
+        WebProbe,
+        classifyClient;
 export 'src/client.dart' show Dash0Client, dash0SdkVersion;
 export 'src/dash0.dart' show Dash0;
 export 'src/ids.dart' show generateSpanId, generateTraceId, isSessionSampledIn;
