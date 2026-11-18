@@ -510,8 +510,8 @@ The SDK does not read native device details (model, OS version). Add them with `
 Values from `resourceAttributes` replace the detected ones.
 
 `user_agent.original` can identify individual browsers. Set `collectUserAgent: false` to leave it out. The other
-attributes stay, and none of them is high cardinality. Dash0 shows the user agent next to the data, so only turn
-it off when policy requires.
+attributes stay, and none of them is high cardinality. Dash0's browser and device breakdowns for websites may rely on
+the user agent, so turn it off only when policy requires.
 
 ## Security note
 
