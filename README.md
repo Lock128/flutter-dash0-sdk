@@ -483,9 +483,35 @@ await Dash0.shutdown(); // flush, restore error handlers, allow init again
 A session id (16 hex characters) is stored in `shared_preferences` under `d0_session` and added to every signal as
 `session.id`. Trace ids embed the session id (`d042` + flags + session id + random) and span ids start with the CRC32 of
 the trace id, like in dash0-sdk-web. `app.instance.id` identifies one app launch (the equivalent of `browser.tab.id`).
-The resource contains `service.*`, `deployment.*`, `telemetry.sdk.*` (`dash0-web-sdk`, `dart`), `os.type` and
+The resource contains `service.*`, `deployment.*`, `telemetry.sdk.*` (`dash0-web-sdk`, `dart`), `os.type`, the client attributes above and
 `app.locale`. Add `app.version`, device information and similar with `resourceAttributes`, for example from
 `package_info_plus`.
+
+### Client type: web, mobile web and native
+
+All signals say where the app runs, so you can tell the desktop web build from the mobile web build and from the
+native apps.
+
+| Attribute | Where | Values |
+| --- | --- | --- |
+| `app.client.type` | resource, events, spans, logs | `web-desktop`, `web-mobile`, `ios`, `android`, `macos`, `windows`, `linux`, `fuchsia` |
+| `app.runtime` | resource | `flutter-web`, `flutter-native` |
+| `os.name` | resource | `iOS`, `Android`, `macOS`, `Windows`, `Linux`, `ChromeOS`, `Fuchsia` |
+| `browser.mobile`, `browser.platform`, `browser.brands` | resource, web only | `true`/`false`, the OS name, brand names such as `Chromium` (only with `navigator.userAgentData`) |
+| `user_agent.original` | events, spans, logs, web only | the browser user agent, like dash0-sdk-web |
+
+`web-mobile` covers phones and tablets in a browser. It is decided by `navigator.userAgentData.mobile` when the browser
+has it, otherwise by the user agent (`Android|iPhone|iPad|iPod|Mobile`). iPadOS Safari in desktop mode sends a Mac user
+agent and is recognized by its touch points. An Android browser in "desktop site" mode reports a desktop user agent and
+is classified as `web-desktop`. `os.type` keeps its earlier values (`web` or the Flutter platform name).
+
+The SDK does not read native device details (model, OS version). Add them with `resourceAttributes`, for example from
+`device_info_plus`, using the OpenTelemetry names `device.model.identifier`, `device.manufacturer` and `os.version`.
+Values from `resourceAttributes` replace the detected ones.
+
+`user_agent.original` can identify individual browsers. Set `collectUserAgent: false` to leave it out. The other
+attributes stay, and none of them is high cardinality. Dash0's browser and device breakdowns for websites may rely on
+the user agent, so turn it off only when policy requires.
 
 ## Security note
 

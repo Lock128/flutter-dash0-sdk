@@ -319,6 +319,7 @@ class Dash0Options {
     this.generatePageViewMetadata,
     this.batchSize = 15,
     this.batchDelay = const Duration(seconds: 1),
+    this.collectUserAgent = true,
     this.debug = false,
     this.enabled = true,
     this.metricExportInterval = const Duration(seconds: 30),
@@ -420,6 +421,11 @@ class Dash0Options {
 
   /// Maximum time a signal waits in the queue.
   final Duration batchDelay;
+
+  /// Adds `user_agent.original` (the raw browser user agent, web only) to
+  /// events, spans and logs, like dash0-sdk-web. Never added to metrics.
+  /// `app.client.type` and the `browser.*` attributes are sent either way.
+  final bool collectUserAgent;
 
   /// Print SDK diagnostics.
   final bool debug;

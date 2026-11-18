@@ -17,6 +17,12 @@ const telemetrySdkLanguage = 'telemetry.sdk.language';
 const telemetrySdkVersion = 'telemetry.sdk.version';
 const osType = 'os.type';
 const osName = 'os.name';
+const appClientType = 'app.client.type';
+const appRuntime = 'app.runtime';
+const browserMobile = 'browser.mobile';
+const browserPlatform = 'browser.platform';
+const browserBrands = 'browser.brands';
+const userAgentOriginal = 'user_agent.original';
 
 // Misc signal attributes
 const eventName = 'event.name';

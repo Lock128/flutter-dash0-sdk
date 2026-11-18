@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'batcher.dart';
+import 'client_info.dart';
 import 'debug.dart';
 import 'ids.dart';
 import 'ignore_rules.dart';
@@ -27,7 +28,7 @@ import 'transport.dart';
 import 'url_attributes.dart';
 
 /// Version reported as `telemetry.sdk.version`.
-const dash0SdkVersion = '0.5.0';
+const dash0SdkVersion = '0.6.0';
 
 /// Legacy scope name, reported with `Dash0Options.legacyAppNames`.
 const dash0ScopeName = 'dash0-flutter-sdk';
@@ -42,9 +43,12 @@ class Dash0Client with WidgetsBindingObserver {
     this.ignoreRules,
     String sessionId, {
     int Function()? nowMillis,
+    Dash0ClientInfo? clientInfo,
   })  : _sessionId = sessionId,
         _clock = nowMillis ?? (() => DateTime.now().millisecondsSinceEpoch),
         _sampled = isSessionSampledIn(sessionId, options.sessionSamplingRate),
+        clientInfo = clientInfo ??
+            detectClientInfo(collectUserAgent: options.collectUserAgent),
         appInstanceId = generateUniqueId(appInstanceIdBytes) {
     _logBatcher = Batcher<Map<String, Object?>>(
       _sendLogs,
@@ -74,6 +78,7 @@ class Dash0Client with WidgetsBindingObserver {
     bool installHttpOverrides = true,
     bool installUiInstrumentation = true,
     int Function()? nowMillis,
+    Dash0ClientInfo? clientInfo,
   }) async {
     options.validate();
     setDash0Debug(options.debug);
@@ -117,6 +122,7 @@ class Dash0Client with WidgetsBindingObserver {
       ),
       sessionId,
       nowMillis: nowMillis,
+      clientInfo: clientInfo,
     );
     if (observeLifecycle && options.isEnabled(Dash0Instrumentation.lifecycle)) {
       WidgetsBinding.instance.addObserver(client);
@@ -157,6 +163,9 @@ class Dash0Client with WidgetsBindingObserver {
   Dash0Names get names =>
       options.legacyAppNames ? Dash0Names.legacy : Dash0Names.web;
   final IgnoreRules ignoreRules;
+
+  /// Client type (web desktop, web mobile, ios, android, ...) of this run.
+  final Dash0ClientInfo clientInfo;
 
   /// Random id of this app launch, the equivalent of the browser tab id.
   final String appInstanceId;
@@ -292,6 +301,7 @@ class Dash0Client with WidgetsBindingObserver {
       sc.telemetrySdkLanguage: 'dart',
       sc.telemetrySdkVersion: dash0SdkVersion,
       sc.osType: kIsWeb ? 'web' : defaultTargetPlatform.name,
+      ...clientInfo.resourceAttributes(),
       sc.appLocale: locale,
       ...o.resourceAttributes,
     };
@@ -340,6 +350,9 @@ class Dash0Client with WidgetsBindingObserver {
   Attributes commonAttributes() => {
         sc.sessionId: _sessionId,
         sc.appInstanceId: appInstanceId,
+        ...clientInfo.signalAttributes(
+          includeUserAgent: options.collectUserAgent,
+        ),
         if (currentScreen != null) sc.appScreenName: currentScreen,
         ...pageUrlAttributes(),
       };
