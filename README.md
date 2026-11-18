@@ -26,7 +26,20 @@ package.
 - Public API: `sendEvent`, `startSpan`, `trace`, `reportError`, `identify`, `addSignalAttribute`,
   `removeSignalAttribute`, `terminateSession`, `flush`, `shutdown` and a runtime `enabled` switch.
 
+## Supported platforms
+
+iOS, Android, web, macOS, Windows and Linux.
+
 ## Installation
+
+Install from [pub.dev](https://pub.dev/packages/dash0_flutter_sdk):
+
+```yaml
+dependencies:
+  dash0_flutter_sdk: ^0.10.0
+```
+
+To track the latest unreleased code, use the git dependency instead:
 
 ```yaml
 dependencies:
@@ -668,6 +681,35 @@ logs, plus `app.client.user_agent.synthetic=true`. `os.version` and the device c
 (`os.version`, `device.model.identifier` or `device.model.name`); missing parts are left out. This is a hack: Dash0 may
 parse the string imperfectly. It is never used on the web and needs `collectUserAgent`.
 
+### Native apps (iOS, Android)
+
+Attributes a native app sends:
+
+| Attribute | Where | Value |
+| --- | --- | --- |
+| `app.client.type` | resource, events, spans, logs | `ios` or `android` |
+| `app.runtime` | resource | `flutter-native` |
+| `os.name` | resource | `iOS` or `Android` |
+| `os.type` | resource | the Flutter platform name: `iOS`, `android`, `macOS` |
+| `app.instance.id`, `session.id` | resource / signals | one id per launch, session id |
+| `user_agent.original`, `app.client.user_agent.synthetic` | events, spans, logs, only with `syntheticUserAgent: true` | see below |
+
+`browser.*`, `page.load.id`, `network.connection.subtype` and the browser `user_agent.original` are web only. Native
+apps send no `user_agent.original` unless `syntheticUserAgent` is on. `os.type` keeps the Flutter platform name
+(`iOS`, `android`, `macOS`), which differs from the casing in the OpenTelemetry semantic conventions.
+
+Add `os.version`, `device.model.identifier` and `device.manufacturer` through `resourceAttributes` (for example from
+`device_info_plus`). `os.name` in `resourceAttributes` also replaces the detected value, so an iPad app can report
+`iPadOS`.
+
+`syntheticUserAgent: true` lets the Dash0 Websites view fill the System and Browser columns for native sessions. The
+string, for example `nexus-share-flutter/1.2.3+45 (iOS 17.2; iPhone15,2)`, is made up by the SDK and flagged with
+`app.client.user_agent.synthetic=true` on events, spans and logs (not on the resource or metrics). Every part is
+stripped of control characters, parentheses and semicolons and capped at 64 characters. That Dash0 parses it this way
+is an inference and has not been verified.
+
+Native sessions can also be filtered by `app.client.type` in Logs, Traces and Metrics.
+
 ### Sessions table shows empty System and Browser
 
 Dash0 fills these columns from `user_agent.original`. To check what the app sends, open the browser dev tools, Network
@@ -709,11 +751,11 @@ telemetry.
 | Numbers sent as `doubleValue`, status code as string | Ints as `intValue`, status code as int (OTLP allows both, a guess that Dash0 accepts both) |
 
 The full comparison, with web SDK source paths for each row and what is verified or a guess, is in
-[docs/web-sdk-gap-analysis.md](docs/web-sdk-gap-analysis.md).
+[doc/web-sdk-gap-analysis.md](doc/web-sdk-gap-analysis.md).
 
 ## Publishing
 
-`pubspec.yaml` has `publish_to: none`, so `dart pub publish` refuses to run. Remove that line to publish to pub.dev.
+The package is published on [pub.dev](https://pub.dev/packages/dash0_flutter_sdk). Release steps are in [doc/publishing.md](doc/publishing.md).
 
 ## Development
 

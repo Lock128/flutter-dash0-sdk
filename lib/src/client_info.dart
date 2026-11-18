@@ -105,18 +105,30 @@ String buildSyntheticUserAgent({
   String? osVersion,
   String? device,
 }) {
-  final product = serviceVersion == null || serviceVersion.isEmpty
-      ? service
-      : '$service/$serviceVersion';
+  final svc = _uaPart(service);
+  final ver = _uaPart(serviceVersion);
+  final product = ver.isEmpty ? svc : '$svc/$ver';
   final os = [
-    if (osName != null && osName.isNotEmpty) osName,
-    if (osVersion != null && osVersion.isNotEmpty) osVersion,
-  ].join(' ');
+    _uaPart(osName),
+    _uaPart(osVersion),
+  ].where((p) => p.isNotEmpty).join(' ');
+  final dev = _uaPart(device);
   final comment = [
     if (os.isNotEmpty) os,
-    if (device != null && device.isNotEmpty) device,
+    if (dev.isNotEmpty) dev,
   ].join('; ');
   return comment.isEmpty ? product : '$product ($comment)';
+}
+
+final _uaUnsafe = RegExp(r'[\u0000-\u001f\u007f-\u009f();]');
+
+/// Removes control characters, parentheses and semicolons, collapses
+/// whitespace and caps the part at 64 characters.
+String _uaPart(String? value) {
+  if (value == null) return '';
+  final clean =
+      value.replaceAll(_uaUnsafe, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+  return clean.length > 64 ? clean.substring(0, 64).trim() : clean;
 }
 
 final _mobileUa =

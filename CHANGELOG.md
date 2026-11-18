@@ -1,8 +1,16 @@
 # Changelog
 
+## 0.10.0
+
+Native iOS and Android telemetry fixes.
+
+- `syntheticUserAgent` uses `os.name` from `resourceAttributes` when set (for example `iPadOS`) instead of the detected platform name.
+- The synthetic user agent is sanitized: control characters, parentheses and semicolons are removed, whitespace is collapsed and each part is capped at 64 characters, so the result is always well formed.
+- Document which attributes native apps send (README, "Native apps (iOS, Android)").
+
 ## 0.9.0
 
-Closes the gaps to dash0-sdk-web 0.35.1 that make sense on Flutter. See `docs/web-sdk-gap-analysis.md`.
+Closes the gaps to dash0-sdk-web 0.35.1 that make sense on Flutter. See `doc/web-sdk-gap-analysis.md`.
 
 Resource and options (read from the web SDK source):
 
@@ -25,7 +33,7 @@ New behavior (read from the web SDK source, Dash0 UI display is a guess):
 Docs:
 
 - README: new options, dart-define examples, console capture, `startView`, `setParentTraceContext` and the list of web SDK features that do not apply to Flutter.
-- Add `docs/web-sdk-gap-analysis.md`.
+- Add `doc/web-sdk-gap-analysis.md`.
 - No Dash0 MCP server was available, so nothing here was checked against a live dataset.
 - `publish_to: none` is unchanged.
 

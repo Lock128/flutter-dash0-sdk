@@ -1,0 +1,42 @@
+name: Publish to pub.dev
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pub.dev
+    permissions:
+      id-token: write # Required for OIDC authentication with pub.dev
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Runs first so that the Flutter SDK, installed next, comes first on PATH.
+      # setup-dart exchanges the OIDC token for pub.dev credentials.
+      - uses: dart-lang/setup-dart@v1
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Verify tag matches pubspec version and is on main
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          pubspec_version="$(grep -E '^version:' pubspec.yaml | head -n1 | awk '{print $2}')"
+          if [ "$tag_version" != "$pubspec_version" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match pubspec.yaml version $pubspec_version"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tag $GITHUB_REF_NAME is not on main"
+            exit 1
+          fi
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      # flutter pub publish uses the Flutter SDK to resolve the package.
+      - run: flutter pub publish --force

@@ -32,7 +32,7 @@ import 'url_attributes.dart';
 import 'vcs.dart';
 
 /// Version reported as `telemetry.sdk.version`.
-const dash0SdkVersion = '0.9.0';
+const dash0SdkVersion = '0.10.0';
 
 /// Legacy scope name, reported with `Dash0Options.legacyAppNames`.
 const dash0ScopeName = 'dash0-flutter-sdk';
@@ -353,7 +353,7 @@ class Dash0Client with WidgetsBindingObserver {
     return buildSyntheticUserAgent(
       service: options.effectiveServiceName,
       serviceVersion: options.serviceVersion,
-      osName: clientInfo.osName,
+      osName: str('os.name') ?? clientInfo.osName,
       osVersion: str('os.version'),
       device: str('device.model.identifier') ?? str('device.model.name'),
     );
