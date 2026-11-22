@@ -98,6 +98,12 @@ const webNoValueFallback = 'undefined';
 
 /// Builds `<service>/<version> (<os> <osVersion>; <device>)` for native
 /// apps, which have no browser user agent. Missing parts are left out.
+///
+/// iOS and iPadOS use the WebKit comment form that user agent parsers (and
+/// Dash0) recognise as an OS, for example
+/// `app/1.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X; iPhone15,2)` and
+/// `app/1.0 (iPad; CPU OS 17_2 like Mac OS X; iPad13,1)`. This needs a
+/// numeric version with at least two parts; otherwise the plain form is used.
 String buildSyntheticUserAgent({
   required String service,
   String? serviceVersion,
@@ -108,16 +114,35 @@ String buildSyntheticUserAgent({
   final svc = _uaPart(service);
   final ver = _uaPart(serviceVersion);
   final product = ver.isEmpty ? svc : '$svc/$ver';
-  final os = [
-    _uaPart(osName),
-    _uaPart(osVersion),
-  ].where((p) => p.isNotEmpty).join(' ');
   final dev = _uaPart(device);
+  final os = _appleOs(_uaPart(osName), _uaPart(osVersion), dev) ??
+      [
+        _uaPart(osName),
+        _uaPart(osVersion),
+      ].where((p) => p.isNotEmpty).join(' ');
   final comment = [
     if (os.isNotEmpty) os,
     if (dev.isNotEmpty) dev,
   ].join('; ');
   return comment.isEmpty ? product : '$product ($comment)';
+}
+
+final _iosName = RegExp(r'^(ios|ipados)$', caseSensitive: false);
+final _iosVersion = RegExp(r'^\d+([._]\d+)+$');
+
+/// The parseable iOS comment part, or null when [osName] is not iOS/iPadOS or
+/// [osVersion] is not a dotted number.
+String? _appleOs(String osName, String osVersion, String device) {
+  if (!_iosName.hasMatch(osName) || !_iosVersion.hasMatch(osVersion)) {
+    return null;
+  }
+  final v = osVersion.replaceAll('.', '_');
+  final lower = device.toLowerCase();
+  if (osName.toLowerCase() == 'ipados' || lower.startsWith('ipad')) {
+    return 'iPad; CPU OS $v like Mac OS X';
+  }
+  final kind = lower.startsWith('ipod') ? 'iPod touch' : 'iPhone';
+  return '$kind; CPU iPhone OS $v like Mac OS X';
 }
 
 final _uaUnsafe = RegExp(r'[\u0000-\u001f\u007f-\u009f();]');

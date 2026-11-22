@@ -36,7 +36,7 @@ Install from [pub.dev](https://pub.dev/packages/dash0_flutter_sdk):
 
 ```yaml
 dependencies:
-  dash0_flutter_sdk: ^0.10.0
+  dash0_flutter_sdk: ^0.11.0
 ```
 
 To track the latest unreleased code, use the git dependency instead:
@@ -678,7 +678,8 @@ the resource.
 `syntheticUserAgent: true` is for native apps, which have no browser user agent. It sends
 `<service.name>/<service.version> (<os.name> <os.version>; <device>)` as `user_agent.original` on events, spans and
 logs, plus `app.client.user_agent.synthetic=true`. `os.version` and the device come from `resourceAttributes`
-(`os.version`, `device.model.identifier` or `device.model.name`); missing parts are left out. This is a hack: Dash0 may
+(`os.version`, `device.model.identifier` or `device.model.name`); missing parts are left out. iOS and iPadOS use the
+form user agent parsers recognise as an OS, see below. This is a hack: Dash0 may
 parse the string imperfectly. It is never used on the web and needs `collectUserAgent`.
 
 ### Native apps (iOS, Android)
@@ -703,10 +704,16 @@ Add `os.version`, `device.model.identifier` and `device.manufacturer` through `r
 `iPadOS`.
 
 `syntheticUserAgent: true` lets the Dash0 Websites view fill the System and Browser columns for native sessions. The
-string, for example `nexus-share-flutter/1.2.3+45 (iOS 17.2; iPhone15,2)`, is made up by the SDK and flagged with
+string, for example `nexus-share-flutter/1.2.3+45 (iPhone; CPU iPhone OS 17_2 like Mac OS X; iPhone15,2)`, is made up by the SDK and flagged with
 `app.client.user_agent.synthetic=true` on events, spans and logs (not on the resource or metrics). Every part is
 stripped of control characters, parentheses and semicolons and capped at 64 characters. That Dash0 parses it this way
 is an inference and has not been verified.
+
+iOS and iPadOS (`os.name` `iOS` or `iPadOS`, or a device identifier starting with `iPad`) use the WebKit comment form,
+because Dash0 only derives `user_agent.os.name` and `user_agent.os.version` from it: `(iPhone; CPU iPhone OS 17_2 like
+Mac OS X; iPhone15,2)` and `(iPad; CPU OS 17_2 like Mac OS X; iPad13,1)`. Version dots become underscores. This needs
+`os.version` with at least two numeric parts; otherwise the plain `(iOS 17; device)` form is sent. Android and other
+platforms keep `(Android 16; device)`, which already parses. No browser name is added.
 
 Native sessions can also be filtered by `app.client.type` in Logs, Traces and Metrics.
 

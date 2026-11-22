@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.0
+
+Fix: Dash0 can show the OS of iOS sessions.
+
+- The synthetic user agent of iOS and iPadOS apps now uses the WebKit comment form that user agent parsers recognise, so Dash0 fills `user_agent.os.name` and `user_agent.os.version`. Example: `app/1.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X; iPhone15,2)`, iPad: `app/1.0 (iPad; CPU OS 17_2 like Mac OS X; iPad13,1)`. Before, `app/1.0 (iOS 17.2; iPhone15,2)` was not parsed as an OS.
+- Without a dotted numeric `os.version` the plain form is kept. Android and other platforms are unchanged.
+
 ## 0.10.0
 
 Native iOS and Android telemetry fixes.

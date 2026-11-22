@@ -229,9 +229,49 @@ void main() {
               osName: 'iOS',
               osVersion: '17.4',
               device: 'iPhone15,2'),
-          'a/1 (iOS 17.4; iPhone15,2)');
+          'a/1 (iPhone; CPU iPhone OS 17_4 like Mac OS X; iPhone15,2)');
       expect(buildSyntheticUserAgent(service: 'a', osName: 'iOS'), 'a (iOS)');
       expect(buildSyntheticUserAgent(service: 'a'), 'a');
+    });
+
+    test('iOS uses the parseable WebKit form', () {
+      String ua({String os = 'iOS', String? v, String? d}) =>
+          buildSyntheticUserAgent(
+              service: 'a',
+              serviceVersion: '1',
+              osName: os,
+              osVersion: v,
+              device: d);
+      expect(ua(v: '27.2.1', d: 'iPhone15,4'),
+          'a/1 (iPhone; CPU iPhone OS 27_2_1 like Mac OS X; iPhone15,4)');
+      expect(ua(os: 'iPadOS', v: '17.2', d: 'iPad13,1'),
+          'a/1 (iPad; CPU OS 17_2 like Mac OS X; iPad13,1)');
+      expect(ua(v: '17.2', d: 'iPad13,1'),
+          'a/1 (iPad; CPU OS 17_2 like Mac OS X; iPad13,1)');
+      expect(ua(v: '17.2', d: 'iPod9,1'),
+          'a/1 (iPod touch; CPU iPhone OS 17_2 like Mac OS X; iPod9,1)');
+      expect(ua(v: '17.2'), 'a/1 (iPhone; CPU iPhone OS 17_2 like Mac OS X)');
+      expect(ua(os: 'iPadOS', v: '17.2'),
+          'a/1 (iPad; CPU OS 17_2 like Mac OS X)');
+      // No usable version: plain form.
+      expect(ua(d: 'iPhone15,4'), 'a/1 (iOS; iPhone15,4)');
+      expect(ua(v: '17', d: 'iPhone15,4'), 'a/1 (iOS 17; iPhone15,4)');
+      expect(ua(v: 'beta', d: 'iPhone15,4'), 'a/1 (iOS beta; iPhone15,4)');
+    });
+
+    test('Android and macOS are unchanged', () {
+      expect(
+          buildSyntheticUserAgent(
+              service: 'pegasus-galaxy-flutter',
+              serviceVersion: '1.0.122+122',
+              osName: 'Android',
+              osVersion: '16',
+              device: 'sdk_gphone64_arm64'),
+          'pegasus-galaxy-flutter/1.0.122+122 (Android 16; sdk_gphone64_arm64)');
+      expect(
+          buildSyntheticUserAgent(
+              service: 'a', osName: 'macOS', osVersion: '14.5', device: 'Mac'),
+          'a (macOS 14.5; Mac)');
     });
 
     test('sent on native signals, not metrics', () async {
@@ -249,7 +289,7 @@ void main() {
       await client.flush();
       for (final s in [transport.logs.single, transport.spans.single]) {
         expect(attr(s, 'user_agent.original'),
-            'my-app/1.2.3 (iOS 17.4; iPhone15,2)');
+            'my-app/1.2.3 (iPhone; CPU iPhone OS 17_4 like Mac OS X; iPhone15,2)');
         expect(attr(s, 'app.client.user_agent.synthetic'), true);
       }
       final m = transport.sent.firstWhere((s) => s.path == '/v1/metrics');
@@ -310,7 +350,7 @@ void main() {
       client.sendEvent('a');
       await client.flush();
       expect(attr(transport.logs.single, 'user_agent.original'),
-          'my-app/1.2.3 (iPadOS 17.2; iPad13,1)');
+          'my-app/1.2.3 (iPad; CPU OS 17_2 like Mac OS X; iPad13,1)');
       final r = _resource(transport, '/v1/logs', 'resourceLogs');
       final a = {
         for (final e in r['attributes']! as List)
